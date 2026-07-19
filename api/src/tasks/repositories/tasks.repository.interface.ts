@@ -1,3 +1,7 @@
+/**
+ * Contrato de persistência de Tasks (DIP).
+ * O service depende desta abstração; Prisma fica só na implementação.
+ */
 import type { Task, TaskStatus } from '../../generated/prisma/client.js'
 
 export type CreateTaskData = {
@@ -36,4 +40,5 @@ export interface TasksRepository {
   delete(id: string): Promise<void>
 }
 
+/** Token de injeção usado no TasksModule */
 export const TASKS_REPOSITORY = Symbol('TASKS_REPOSITORY')

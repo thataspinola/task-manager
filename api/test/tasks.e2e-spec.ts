@@ -1,14 +1,13 @@
 import { INestApplication } from '@nestjs/common'
 import { Test, TestingModule } from '@nestjs/testing'
 import request from 'supertest'
-import { App } from 'supertest/types'
 import { AppModule } from '../src/app.module.js'
 import { configureApp } from '../src/bootstrap/create-app.js'
 import { PrismaService } from '../src/common/database/prisma.service.js'
 import { TaskStatus } from '../src/generated/prisma/enums.js'
 
 describe('Tasks API (e2e)', () => {
-  let app: INestApplication<App>
+  let app: INestApplication
   let prisma: PrismaService
 
   beforeAll(async () => {
@@ -82,14 +81,29 @@ describe('Tasks API (e2e)', () => {
       .delete(`/api/tasks/${taskId}`)
       .expect(204)
 
-    await request(app.getHttpServer()).get(`/api/tasks/${taskId}`).expect(404)
+    const missing = await request(app.getHttpServer())
+      .get(`/api/tasks/${taskId}`)
+      .expect(404)
+
+    expect(missing.body).toMatchObject({
+      statusCode: 404,
+      path: `/api/tasks/${taskId}`,
+      method: 'GET',
+    })
   })
 
   it('rejects invalid create payloads', async () => {
-    await request(app.getHttpServer())
+    const shortTitle = await request(app.getHttpServer())
       .post('/api/tasks')
       .send({ title: 'ab' })
       .expect(400)
+
+    expect(shortTitle.body).toMatchObject({
+      statusCode: 400,
+      error: 'Bad Request',
+      path: '/api/tasks',
+      method: 'POST',
+    })
 
     await request(app.getHttpServer())
       .post('/api/tasks')
@@ -139,5 +153,20 @@ describe('Tasks API (e2e)', () => {
 
     expect(response.body.data).toHaveLength(1)
     expect(response.body.data[0].title).toBe('Alpha task')
+  })
+
+  it('returns health ok when database is available', async () => {
+    const response = await request(app.getHttpServer())
+      .get('/api/health')
+      .expect(200)
+
+    expect(response.body).toMatchObject({
+      status: 'ok',
+      database: 'connected',
+    })
+  })
+
+  it('exposes swagger docs', async () => {
+    await request(app.getHttpServer()).get('/api/docs').expect(200)
   })
 })

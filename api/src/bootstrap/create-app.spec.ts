@@ -3,21 +3,47 @@
 import { INestApplication, ValidationPipe } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import { NestFactory } from '@nestjs/core'
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger'
 import { AppModule } from '../app.module.js'
-import { PrismaExceptionFilter } from '../common/filters/prisma-exception.filter.js'
+import { AllExceptionsFilter } from '../common/filters/all-exceptions.filter.js'
 import {
   bootstrap,
   configureApp,
   createApp,
   createValidationPipe,
   resolveCorsOptions,
+  setupSwagger,
 } from './create-app.js'
+
+jest.mock('../app.module.js', () => ({
+  AppModule: class AppModule {},
+}))
 
 jest.mock('@nestjs/core', () => ({
   NestFactory: {
     create: jest.fn(),
   },
 }))
+
+jest.mock('@nestjs/swagger', () => {
+  const actual = jest.requireActual('@nestjs/swagger') as typeof import('@nestjs/swagger')
+  const chain = {
+    setTitle: jest.fn().mockReturnThis(),
+    setDescription: jest.fn().mockReturnThis(),
+    setVersion: jest.fn().mockReturnThis(),
+    addTag: jest.fn().mockReturnThis(),
+    build: jest.fn().mockReturnValue({}),
+  }
+
+  return {
+    ...actual,
+    DocumentBuilder: jest.fn(() => chain),
+    SwaggerModule: {
+      createDocument: jest.fn().mockReturnValue({}),
+      setup: jest.fn(),
+    },
+  }
+})
 
 describe('create-app bootstrap', () => {
   const listen = jest.fn().mockResolvedValue(undefined)
@@ -86,17 +112,53 @@ describe('create-app bootstrap', () => {
     })
   })
 
-  it('configures api prefix, cors, pipes and prisma filter', () => {
+  it('configures api prefix, cors, pipes, filter and swagger', () => {
     const result = configureApp(app)
 
     expect(setGlobalPrefix).toHaveBeenCalledWith('api')
     expect(enableCors).toHaveBeenCalledWith(true)
     expect(useGlobalPipes).toHaveBeenCalledWith(expect.any(ValidationPipe))
     expect(useGlobalFilters).toHaveBeenCalledWith(
-      expect.any(PrismaExceptionFilter),
+      expect.any(AllExceptionsFilter),
     )
     expect(enableShutdownHooks).toHaveBeenCalled()
+    expect(SwaggerModule.setup).toHaveBeenCalled()
     expect(result).toBe(app)
+  })
+
+  it('skips swagger when disabled', () => {
+    configureApp(app, { swagger: false })
+
+    expect(SwaggerModule.setup).not.toHaveBeenCalled()
+  })
+
+  it('skips swagger by default in production', () => {
+    configGet.mockImplementation((key: string, fallback?: string | number) => {
+      if (key === 'NODE_ENV') {
+        return 'production'
+      }
+
+      return fallback
+    })
+
+    configureApp(app)
+
+    expect(SwaggerModule.setup).not.toHaveBeenCalled()
+  })
+
+  it('sets up swagger document metadata', () => {
+    setupSwagger(app)
+
+    expect(DocumentBuilder).toHaveBeenCalled()
+    expect(SwaggerModule.createDocument).toHaveBeenCalledWith(app, {})
+    expect(SwaggerModule.setup).toHaveBeenCalledWith(
+      'api/docs',
+      app,
+      {},
+      expect.objectContaining({
+        customSiteTitle: 'Task Manager API Docs',
+      }),
+    )
   })
 
   it('creates the Nest application and configures it', async () => {

@@ -1,4 +1,8 @@
-import { Inject, Injectable } from '@nestjs/common'
+/**
+ * Adaptador Prisma do contrato TasksRepository.
+ * Toda query SQL/ORM de tasks fica concentrada aqui.
+ */
+import { Injectable } from '@nestjs/common'
 import type { Prisma, Task } from '../../generated/prisma/client.js'
 import { PrismaService } from '../../common/database/prisma.service.js'
 import type {
@@ -11,10 +15,7 @@ import type {
 
 @Injectable()
 export class PrismaTasksRepository implements TasksRepository {
-  constructor(
-    @Inject(PrismaService)
-    private readonly prisma: PrismaService,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   create(data: CreateTaskData): Promise<Task> {
     return this.prisma.task.create({ data })
@@ -24,6 +25,7 @@ export class PrismaTasksRepository implements TasksRepository {
     const { page, limit, filters } = input
     const where = this.buildWhere(filters)
 
+    // Lista + total na mesma transação para meta de paginação consistente
     const [items, total] = await this.prisma.$transaction([
       this.prisma.task.findMany({
         where,
@@ -49,7 +51,9 @@ export class PrismaTasksRepository implements TasksRepository {
     await this.prisma.task.delete({ where: { id } })
   }
 
-  private buildWhere(filters: FindManyTasksInput['filters']): Prisma.TaskWhereInput {
+  private buildWhere(
+    filters: FindManyTasksInput['filters'],
+  ): Prisma.TaskWhereInput {
     const search = filters.search?.trim()
 
     return {

@@ -1,3 +1,7 @@
+/**
+ * Regras de negócio de Tasks.
+ * Não conhece Prisma: só o contrato TasksRepository.
+ */
 import { Inject, Injectable, NotFoundException } from '@nestjs/common'
 import type { Task } from '../../generated/prisma/client.js'
 import { TaskStatus } from '../../generated/prisma/enums.js'
@@ -65,6 +69,7 @@ export class TasksService {
   }
 
   async update(id: string, input: UpdateTaskDto): Promise<Task> {
+    // Garante 404 semântico antes do update (em vez de depender só do P2025)
     await this.findOne(id)
 
     const data: UpdateTaskData = {}
@@ -89,6 +94,7 @@ export class TasksService {
     await this.tasksRepository.delete(id)
   }
 
+  /** `undefined` = não alterar; string vazia = limpar no banco (`null`) */
   private normalizeDescription(
     description?: string,
   ): string | null | undefined {

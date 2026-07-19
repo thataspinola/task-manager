@@ -1,3 +1,7 @@
+/**
+ * Cliente Prisma tipado (Prisma 7 + adapter `pg`).
+ * Conecta no init do módulo e desconecta no shutdown do Nest.
+ */
 import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import { PrismaPg } from '@prisma/adapter-pg'

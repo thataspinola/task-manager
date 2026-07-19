@@ -1,1054 +1,339 @@
-# 🧠 Pair Programming Survival Guide
+# Task Manager
 
-# Guia de apoio — Pair Programming Node.js e React
-
-## REGRA PRINCIPAL
-
-Eu não preciso saber tudo de memória.
-
-Eu preciso:
-
-1. entender o problema;
-2. explicar o que estou pensando;
-3. construir uma solução simples;
-4. validar se funciona;
-5. melhorar se houver tempo.
-
----
-
-# 1. PRIMEIROS MINUTOS
-
-Antes de escrever código, dizer:
-
-> Antes de começar, vou confirmar se entendi corretamente o problema.
-
-Depois explicar com minhas palavras:
-
-> Pelo que entendi, precisamos receber ou exibir X, aplicar a regra Y e produzir o resultado Z. É isso?
-
-## Perguntas para destravar o problema
-
-Escolher apenas as perguntas relevantes:
-
-- Qual é a entrada?
-- Qual é a saída esperada?
-- Existe um exemplo?
-- Como devemos tratar entradas inválidas?
-- Precisamos persistir dados?
-- Posso usar TypeScript?
-- Posso instalar bibliotecas?
-- Existe alguma restrição de arquitetura?
-- Precisamos escrever testes?
-- Devemos considerar performance ou alto volume?
-- Posso alterar a estrutura do código existente?
-
-## Se o requisito estiver confuso
-
-Dizer:
-
-> Vou usar um exemplo concreto para confirmar meu entendimento.
-
-Exemplo:
+Monorepo de um gerenciador de tarefas com arquitetura em camadas:
 
 ```text
-Entrada: ...
-Resultado esperado: ...
+React (front)  →  NestJS BFF (bff)  →  NestJS API (api)  →  PostgreSQL
 ```
+
+O frontend **não** fala com a API diretamente. O BFF adapta contratos, agrega chamadas e isola o browser da API de domínio.
 
 ---
 
-# 2. ANTES DE CODAR
+## Índice
 
-Fazer esta análise:
+1. [Visão geral](#visão-geral)
+2. [Arquitetura](#arquitetura)
+3. [Estrutura do repositório](#estrutura-do-repositório)
+4. [Stack e bibliotecas (por quê)](#stack-e-bibliotecas-por-quê)
+5. [Modelo de domínio](#modelo-de-domínio)
+6. [Como subir o projeto](#como-subir-o-projeto)
+7. [Endpoints](#endpoints)
+8. [Princípios de código](#princípios-de-código)
+9. [Testes](#testes)
+10. [Decisões técnicas](#decisões-técnicas)
+11. [Documentação por pacote](#documentação-por-pacote)
+
+---
+
+## Visão geral
+
+| Camada | Pasta | Responsabilidade |
+| ------ | ----- | ---------------- |
+| **Frontend** | `front/` | UI React (em construção) |
+| **BFF** | `bff/` | Proxy tipado para a API; contratos pensados para o front |
+| **API** | `api/` | Regras de negócio, CRUD, persistência, Swagger |
+| **Banco** | PostgreSQL | Fonte da verdade dos dados |
+
+### Status atual
+
+| Pacote | Status |
+| ------ | ------ |
+| [api](./api) | Pronto: CRUD, paginação, filtros, health, Swagger, testes (unit/integração/e2e) |
+| [bff](./bff) | Em evolução: proxy HTTP de tasks + health + validação de env |
+| `front/` | Pasta reservada (Vite/React previsto na porta `5173`) |
+
+---
+
+## Arquitetura
 
 ```text
-O que entra?
-O que precisa acontecer?
-O que deve sair?
-O que pode dar errado?
+┌─────────────┐     ┌──────────────┐     ┌──────────────┐     ┌────────────┐
+│  React UI   │────▶│  NestJS BFF  │────▶│  NestJS API  │────▶│ PostgreSQL │
+│  (front)    │     │  :3002       │     │  :3001/api   │     │            │
+└─────────────┘     └──────────────┘     └──────────────┘     └────────────┘
 ```
 
-Depois dizer:
+### Por que BFF?
 
-> Vou começar pela solução mais simples que atende ao cenário principal. Depois adicionamos validações e melhorias.
+- O browser não precisa conhecer detalhes internos da API
+- Facilita CORS, agregação e adaptação de payload para a UI
+- Permite evoluir a API sem quebrar o frontend de uma vez
 
-## Ordem segura
+### Fluxo interno da API (Clean Architecture leve)
 
 ```text
-1. Caminho principal
-2. Validação
-3. Tratamento de erro
-4. Testes
-5. Refatoração
-6. Melhorias de produção
+Controller (HTTP)
+   → DTO + ValidationPipe
+   → Service (regras)
+   → Repository (DIP)
+   → PrismaService
+   → PostgreSQL
 ```
 
 ---
 
-# 3. QUANDO FOR UM PROBLEMA DE LÓGICA
-
-Perguntar:
-
-- Preciso percorrer uma coleção?
-- Preciso encontrar algo?
-- Preciso contar ocorrências?
-- Preciso evitar duplicados?
-- Preciso agrupar dados?
-- Preciso ordenar?
-- Preciso transformar uma entrada?
-
-## Atalhos mentais
-
-### Preciso procurar algo rapidamente
-
-Usar:
-
-```ts
-Map;
-Set;
-```
-
-### Preciso remover duplicados
-
-```ts
-const uniqueValues = [...new Set(values)];
-```
-
-### Preciso transformar uma lista
-
-```ts
-items.map(...)
-```
-
-### Preciso filtrar uma lista
-
-```ts
-items.filter(...)
-```
-
-### Preciso encontrar um item
-
-```ts
-items.find(...)
-```
-
-### Preciso verificar se existe
-
-```ts
-items.some(...)
-```
-
-### Preciso verificar se todos atendem
-
-```ts
-items.every(...)
-```
-
-### Preciso acumular ou agrupar
-
-```ts
-items.reduce(...)
-```
-
-### Preciso ordenar
-
-```ts
-const sorted = [...items].sort((a, b) => a - b);
-```
-
-Evitar alterar a entrada original sem necessidade.
-
----
-
-# 4. QUANDO FOR NODE.JS
-
-Pensar neste fluxo:
+## Estrutura do repositório
 
 ```text
-Entrada
-↓
-Validação
-↓
-Regra de negócio
-↓
-Acesso a dados ou integração
-↓
-Resposta
+task-manager/
+├── api/                 # API de domínio (NestJS + Prisma)
+│   ├── prisma/          # schema, migrations, seed
+│   ├── src/
+│   │   ├── bootstrap/   # create-app (CORS, pipes, filter, Swagger)
+│   │   ├── common/      # Prisma + exception filter
+│   │   ├── config/      # validação de env (Joi)
+│   │   ├── health/
+│   │   ├── tasks/       # feature: controller/service/repository/dto
+│   │   └── generated/   # Prisma Client gerado
+│   └── test/            # integração + e2e
+├── bff/                 # Backend for Frontend (NestJS + Axios)
+│   └── src/
+│       ├── http/        # HttpModule configurado para a API
+│       ├── health/
+│       └── tasks/       # proxy tipado dos endpoints de tasks
+├── front/               # Frontend (reservado)
+└── README.md            # este arquivo
 ```
 
-## Estrutura básica
+---
+
+## Stack e bibliotecas (por quê)
+
+### Núcleo compartilhado (API + BFF)
+
+| Biblioteca | Papel | Por que escolhemos |
+| ---------- | ----- | ------------------ |
+| **Node.js + TypeScript** | Runtime e tipagem | Ecossistema maduro; tipagem reduz bugs e documenta contratos |
+| **NestJS** (`@nestjs/common`, `core`, `platform-express`) | Framework HTTP modular | Módulos, DI, pipes/filters/guards e estrutura alinhada a SOLID |
+| **@nestjs/config** | Configuração | Carrega `.env` e injeta `ConfigService` de forma tipada |
+| **Joi** | Validação de env | Falha cedo no boot se `PORT`, `DATABASE_URL` / `API_BASE_URL` etc. estiverem inválidos |
+| **class-validator** + **class-transformer** | Validação de DTO | Com `ValidationPipe` (`whitelist` + `forbidNonWhitelisted`) rejeita payload inválido/extra |
+| **@nestjs/swagger** | OpenAPI | Documentação interativa dos endpoints (`/api/docs` na API) |
+| **reflect-metadata** + **rxjs** | Base do Nest | Decorators e streams usados internamente pelo framework |
+| **Jest** + **Supertest** | Testes | Unitários, integração e e2e HTTP |
+| **ESLint** + **Prettier** | Qualidade/estilo | Padroniza o código e evita discussões de formatação |
+| **TypeScript ESLint** | Lint tipado | Regras modernas para TS/Nest |
+
+### Específicas da API (`api/`)
+
+| Biblioteca | Papel | Por que escolhemos |
+| ---------- | ----- | ------------------ |
+| **PostgreSQL** | Banco relacional | Tipos fortes, JSON, enums, ótimo com Prisma; referência sólida para CRUD |
+| **Prisma** (`prisma`, `@prisma/client`) | ORM + migrations | Schema tipado, migrations versionadas, client gerado, DX alta |
+| **@prisma/adapter-pg** + **pg** | Driver Prisma 7 | No Prisma 7 a conexão usa adapter; `pg` é o cliente oficial do Postgres |
+| **dotenv** | Env em scripts/CLI | Garante `DATABASE_URL` disponível em seed/migrate/runtime |
+| **@swc/jest** + **@swc/core** | Transform nos testes | Mais rápido que `ts-jest` com decorators Nest |
+| **tsx** | Execução TS (seed) | Roda `prisma/seed.ts` sem build prévio |
+
+#### O que a API deliberadamente não usa
+
+- ORM “cru” sem tipagem (ex.: só SQL string) — Prisma reduz boilerplate e erros
+- Acesso direto do front à API — responsabilidade do BFF
+
+### Específicas do BFF (`bff/`)
+
+| Biblioteca | Papel | Por que escolhemos |
+| ---------- | ----- | ------------------ |
+| **@nestjs/axios** + **axios** | Cliente HTTP | Padrão Nest para chamar a API; timeout, baseURL e headers centralizados |
+| **@nestjs/mapped-types** | DTOs parciais | `PartialType` no update sem duplicar campos |
+
+O BFF **não** usa Prisma: ele não persiste domínio; só orquestra chamadas à API.
+
+### Frontend (`front/`) — planejado
+
+| Biblioteca (prevista) | Papel | Por que |
+| --------------------- | ----- | ------- |
+| **React** | UI | Componente padrão do ecossistema |
+| **Vite** | Bundler/dev server | DX rápida; porta típica `5173` (já no `CORS_ORIGIN` / `FRONTEND_ORIGIN`) |
+
+---
+
+## Modelo de domínio
 
 ```text
-Controller ou Handler
-↓
-Service ou Use Case
-↓
-Repository ou Client
+Task
+├── id            UUID
+├── title         string (3–120)
+├── description   string? (até 500)
+├── status        PENDING | IN_PROGRESS | COMPLETED
+├── createdAt     DateTime
+└── updatedAt     DateTime
 ```
 
-## Perguntas mentais
-
-- A regra está misturada com HTTP?
-- Preciso validar a entrada?
-- Essa função pode falhar?
-- O erro está sendo tratado?
-- As operações podem rodar em paralelo?
-- Preciso preservar consistência?
-- Existe risco de executar duas vezes?
-- O código está fácil de testar?
+Status no banco como **enum** para garantir valores válidos. No front, os rótulos podem ser traduzidos (Pendente, Em andamento, Concluída).
 
 ---
 
-# 5. MODELO NODE PARA COMEÇAR
+## Como subir o projeto
 
-```ts
-type Input = {
-  value: string;
-};
+### Requisitos
 
-type Output = {
-  result: string;
-};
+- Node.js 20+
+- npm
+- PostgreSQL com banco `task_manager`
 
-export class ProcessDataService {
-  async execute(input: Input): Promise<Output> {
-    this.validate(input);
+### 1) API (porta `3001`)
 
-    const result = await this.process(input.value);
-
-    return { result };
-  }
-
-  private validate(input: Input): void {
-    if (!input.value?.trim()) {
-      throw new Error("Value is required");
-    }
-  }
-
-  private async process(value: string): Promise<string> {
-    return value.trim();
-  }
-}
+```bash
+cd api
+npm install
+cp .env.example .env
 ```
 
-Explicar:
+```sql
+CREATE DATABASE task_manager;
+```
 
-> Estou mantendo a validação e a regra separadas para facilitar leitura e testes.
+```env
+NODE_ENV=development
+PORT=3001
+DATABASE_URL="postgresql://postgres:postgres@localhost:5432/task_manager?schema=public"
+CORS_ORIGIN=http://localhost:5173
+```
+
+```bash
+npm run prisma:generate
+npm run prisma:migrate
+npm run prisma:seed
+npm run start:dev
+```
+
+| Recurso | URL |
+| ------- | --- |
+| API | [http://localhost:3001/api](http://localhost:3001/api) |
+| Swagger | [http://localhost:3001/api/docs](http://localhost:3001/api/docs) |
+| Health | [http://localhost:3001/api/health](http://localhost:3001/api/health) |
+
+> Em `NODE_ENV=production`, o Swagger fica desligado por padrão.
+
+### 2) BFF (porta `3002`)
+
+Com a API já rodando:
+
+```bash
+cd bff
+npm install
+cp .env.example .env
+```
+
+```env
+NODE_ENV=development
+PORT=3002
+API_BASE_URL=http://localhost:3001/api
+FRONTEND_ORIGIN=http://localhost:5173
+HTTP_TIMEOUT=5000
+```
+
+```bash
+npm run start:dev
+```
+
+### 3) Frontend
+
+Pasta `front/` ainda sem código. Quando existir, a expectativa é consumir o **BFF**, não a API.
 
 ---
 
-# 6. ASYNC E PROMISES
+## Endpoints
 
-## Uma operação depende da anterior
+### API (`:3001`)
 
-```ts
-const user = await findUser();
-const orders = await findOrders(user.id);
-```
+| Método | Endpoint | Descrição |
+| ------ | -------- | --------- |
+| `POST` | `/api/tasks` | Criar tarefa |
+| `GET` | `/api/tasks` | Listar (`page`, `limit`, `status`, `search`) |
+| `GET` | `/api/tasks/:id` | Buscar por ID |
+| `PATCH` | `/api/tasks/:id` | Atualizar |
+| `DELETE` | `/api/tasks/:id` | Remover |
+| `GET` | `/api/health` | Saúde da app + banco (`ok` / `degraded`) |
 
-## Operações independentes
+### BFF (`:3002`)
 
-```ts
-const [user, products] = await Promise.all([findUser(), findProducts()]);
-```
-
-Dizer:
-
-> Como essas operações são independentes, vou executá-las em paralelo.
-
-## Uma falha não pode cancelar as outras
-
-```ts
-const results = await Promise.allSettled([taskOne(), taskTwo()]);
-```
-
-## Regra rápida
-
-```text
-Promise.all
-Todas precisam funcionar.
-
-Promise.allSettled
-Quero saber o resultado de todas.
-
-Promise.race
-Quero a primeira que finalizar.
-
-Promise.any
-Quero a primeira que funcionar.
-```
+Espelha as operações de tasks via HTTP client apontando para `API_BASE_URL`, além do health do próprio BFF. Detalhes evoluem em [bff/](./bff).
 
 ---
 
-# 7. TRATAMENTO DE ERRO NO NODE
+## Princípios de código
 
-Evitar:
+Aplicamos de forma pragmática (sem overengineering):
 
-```ts
-throw "erro";
-```
+| Princípio | Como aparece no projeto |
+| --------- | ------------------------ |
+| **S**ingle Responsibility | Controller HTTP fino; service com regras; repository com queries |
+| **O**pen/Closed | Novos filtros/status sem reescrever o CRUD inteiro |
+| **L**iskov | Implementação Prisma substitui o contrato do repository |
+| **I**nterface Segregation | Contrato `TasksRepository` só com operações de task |
+| **D**ependency Inversion | `TasksService` depende de `TASKS_REPOSITORY`, não do Prisma |
 
-Preferir:
-
-```ts
-throw new Error("Something went wrong");
-```
-
-Ou:
-
-```ts
-class NotFoundError extends Error {
-  constructor(resource: string) {
-    super(`${resource} not found`);
-    this.name = "NotFoundError";
-  }
-}
-```
-
-## Códigos HTTP
-
-```text
-200 — sucesso
-201 — criado
-204 — sucesso sem conteúdo
-400 — requisição inválida
-401 — não autenticado
-403 — sem permissão
-404 — não encontrado
-409 — conflito
-422 — regra ou validação semântica
-500 — erro inesperado
-```
+Clean Code na prática: nomes claros, DTOs explícitos, um filter de erros, bootstrap único (`create-app`), env validado, comentários só onde explicam o *porquê*.
 
 ---
 
-# 8. QUANDO FOR REACT
+## Testes
 
-Pensar primeiro nos estados:
+### API
 
-```text
-Loading
-Error
-Empty
-Success
+```bash
+cd api
+npm run test:all   # unit (100% coverage) + integração + e2e
 ```
 
-## Perguntas mentais
+| Tipo | O que cobre |
+| ---- | ----------- |
+| Unitário | Service, repository, filter, DTOs, bootstrap, health |
+| Integração | Service + repository + Postgres real |
+| E2E | Fluxo HTTP completo (`/api/tasks`, health, validação, Swagger) |
 
-- De onde vêm os dados?
-- Esse estado é local ou remoto?
-- Quem é responsável pela chamada?
-- O componente está fazendo coisas demais?
-- Existe efeito colateral?
-- O usuário recebe feedback?
-- A tela funciona com lista vazia?
-- Existe acessibilidade básica?
-- Existe risco de requisição duplicada?
+### BFF
 
----
-
-# 9. MODELO REACT PARA COMEÇAR
-
-```tsx
-type User = {
-  id: string;
-  name: string;
-};
-
-type UserListProps = {
-  users: User[];
-  isLoading: boolean;
-  error?: string;
-};
-
-export function UserList({ users, isLoading, error }: UserListProps) {
-  if (isLoading) {
-    return <p>Carregando...</p>;
-  }
-
-  if (error) {
-    return <p role="alert">{error}</p>;
-  }
-
-  if (users.length === 0) {
-    return <p>Nenhum usuário encontrado.</p>;
-  }
-
-  return (
-    <ul>
-      {users.map((user) => (
-        <li key={user.id}>{user.name}</li>
-      ))}
-    </ul>
-  );
-}
-```
-
-Explicar:
-
-> Estou tratando explicitamente os estados de carregamento, erro, lista vazia e sucesso.
-
----
-
-# 10. USEEFFECT
-
-Usar quando existe sincronização com algo externo:
-
-- API;
-- evento do navegador;
-- timer;
-- subscription;
-- armazenamento externo.
-
-Não usar apenas para calcular valor.
-
-Evitar:
-
-```tsx
-const [fullName, setFullName] = useState("");
-
-useEffect(() => {
-  setFullName(`${firstName} ${lastName}`);
-}, [firstName, lastName]);
-```
-
-Preferir:
-
-```tsx
-const fullName = `${firstName} ${lastName}`;
-```
-
-## Exemplo de busca
-
-```tsx
-useEffect(() => {
-  const controller = new AbortController();
-
-  async function loadUsers() {
-    try {
-      setIsLoading(true);
-      setError(null);
-
-      const response = await fetch("/api/users", {
-        signal: controller.signal,
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to load users");
-      }
-
-      const data = await response.json();
-      setUsers(data);
-    } catch (error) {
-      if (error instanceof Error && error.name !== "AbortError") {
-        setError(error.message);
-      }
-    } finally {
-      setIsLoading(false);
-    }
-  }
-
-  loadUsers();
-
-  return () => controller.abort();
-}, []);
+```bash
+cd bff
+npm test
+npm run test:e2e
 ```
 
 ---
 
-# 11. ESTADO NO REACT
+## Decisões técnicas
 
-## Estado local
+### Por que NestJS e não Express “puro”?
 
-Usar quando apenas um componente ou poucos filhos precisam.
+Queremos módulos, DI e convenções que escalam (features, filters, pipes)
+sem inventar estrutura do zero.
 
-```tsx
-useState;
-```
+### Por que Prisma só na API?
 
-## Context
+Persistência e regras de domínio ficam na API. O BFF orquestra HTTP; o front
+renderiza. Evita acoplar UI e banco.
 
-Usar para dados compartilhados e relativamente estáveis:
+### Por que enum de status no Postgres?
 
-- tema;
-- autenticação;
-- idioma;
-- configurações.
+O banco rejeita valores inválidos além da validação da aplicação.
 
-## Redux ou Zustand
+### Por que Joi no env e class-validator nos DTOs?
 
-Usar para estado global complexo, com várias interações.
+Camadas diferentes: boot da app vs. cada request. Cada uma falha no momento certo.
 
-## TanStack Query
+### Por que Axios no BFF?
 
-Usar para estado remoto:
+Cliente HTTP maduro, integrado ao Nest via `@nestjs/axios`, com timeout e
+baseURL configuráveis.
 
-- cache;
-- loading;
-- error;
-- retry;
-- invalidação;
-- refetch.
+### Por que monorepo?
 
-Frase segura:
-
-> Estado do servidor e estado da interface têm necessidades diferentes. Para dados remotos, eu avaliaria uma biblioteca como TanStack Query.
+Um lugar para ver o sistema inteiro (front → bff → api → db), com pacotes
+independentes e deploys separados se necessário.
 
 ---
 
-# 12. PERFORMANCE NO REACT
+## Documentação por pacote
 
-Não otimizar automaticamente.
-
-Primeiro dizer:
-
-> Eu evitaria memoização prematura. Só adicionaria se existisse um problema real de renderização.
-
-## Ferramentas
-
-```text
-React.memo
-Evita renderização quando props não mudam.
-
-useMemo
-Memoriza um valor calculado.
-
-useCallback
-Memoriza a referência de uma função.
-
-lazy
-Carrega um módulo sob demanda.
-```
-
-## Antes de usar, verificar
-
-- A operação é realmente cara?
-- A referência está causando renderizações?
-- O componente renderiza muitas vezes?
-- Existe evidência no profiler?
+- API detalhada (endpoints, Prisma, erros): [api/README.md](./api/README.md)
+- BFF: pasta [bff/](./bff) (README do pacote ainda genérico do Nest; a fonte da verdade do monorepo é este arquivo)
 
 ---
 
-# 13. TYPESCRIPT
+## Licença
 
-## Evitar `any`
-
-Preferir:
-
-```ts
-unknown;
-```
-
-Exemplo:
-
-```ts
-function getErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  return "Unexpected error";
-}
-```
-
-## `type` ou `interface`
-
-Regra prática:
-
-```text
-interface
-Bom para contratos de objetos e extensões.
-
-type
-Bom para unions, intersections e composições.
-```
-
-Não transformar isso em discussão dogmática.
-
-## Utility Types
-
-```ts
-Partial<User>;
-Pick<User, "id" | "name">;
-Omit<User, "password">;
-Record<string, User>;
-Readonly<User>;
-```
-
----
-
-# 14. TESTES
-
-Não preciso testar tudo.
-
-Priorizar:
-
-```text
-1. Caminho feliz
-2. Erro principal
-3. Caso de borda importante
-```
-
-## Estrutura mental
-
-```text
-Arrange
-Act
-Assert
-```
-
-## Exemplo Node
-
-```ts
-describe("ProcessDataService", () => {
-  it("processes a valid value", async () => {
-    const service = new ProcessDataService();
-
-    const result = await service.execute({
-      value: " test ",
-    });
-
-    expect(result).toEqual({
-      result: "test",
-    });
-  });
-
-  it("rejects an empty value", async () => {
-    const service = new ProcessDataService();
-
-    await expect(
-      service.execute({
-        value: "",
-      }),
-    ).rejects.toThrow("Value is required");
-  });
-});
-```
-
-## Exemplo React
-
-```tsx
-render(<UserList users={[]} isLoading={false} />);
-
-expect(screen.getByText("Nenhum usuário encontrado.")).toBeInTheDocument();
-```
-
-## Frase segura
-
-> Vou testar o comportamento mais importante, evitando acoplamento excessivo à implementação.
-
----
-
-# 15. SE HOUVER BANCO DE DADOS
-
-Perguntar:
-
-- Precisa de transação?
-- Pode haver concorrência?
-- Existe restrição de unicidade?
-- Qual será o volume?
-- Existe paginação?
-- A consulta precisa de índice?
-- Existe risco de N+1?
-
-## Paginação
-
-```text
-Offset
-Mais simples, mas pode piorar em grandes volumes.
-
-Cursor
-Mais estável e eficiente para grandes conjuntos.
-```
-
-## Concorrência
-
-Não confiar apenas em:
-
-```text
-Consultar se existe
-↓
-Criar
-```
-
-Também usar restrição de unicidade no banco.
-
-Frase:
-
-> A validação na aplicação melhora a experiência, mas a integridade deve ser garantida no banco.
-
----
-
-# 16. SE HOUVER API EXTERNA
-
-Pensar em:
-
-- timeout;
-- retry;
-- erro;
-- autenticação;
-- rate limit;
-- idempotência;
-- circuit breaker;
-- observabilidade.
-
-Não implementar tudo automaticamente.
-
-Dizer:
-
-> Para o exercício vou tratar sucesso e falha. Em produção, eu avaliaria timeout, retry com backoff e métricas.
-
----
-
-# 17. SE PERGUNTAREM SOBRE ARQUITETURA
-
-Não começar falando de microserviços.
-
-Perguntar:
-
-- Qual é o problema atual?
-- Qual é o volume?
-- Quantos times trabalham nisso?
-- Quais partes mudam juntas?
-- Existe necessidade de escala independente?
-- Qual é o custo operacional aceitável?
-
-Frase segura:
-
-> Eu começaria com a solução mais simples que preserve separação de responsabilidades. Só adicionaria distribuição quando existisse uma necessidade concreta.
-
----
-
-# 18. SE EU NÃO LEMBRAR UMA SINTAXE
-
-Dizer:
-
-> Eu conheço o comportamento, mas não lembro a assinatura exata. Vou confirmar rapidamente na documentação.
-
-Ou:
-
-> Não lembro o nome exato dessa função agora. Posso implementar de uma forma equivalente e depois ajustar.
-
-Não fingir.
-
-Não entrar em pânico.
-
-Não pedir desculpas várias vezes.
-
----
-
-# 19. SE EU TRAVAR
-
-Usar esta sequência:
-
-```text
-1. Voltar ao exemplo.
-2. Reduzir o problema.
-3. Escrever o resultado esperado.
-4. Resolver manualmente.
-5. Transformar os passos em código.
-```
-
-Dizer:
-
-> Vou reduzir para um exemplo menor e transformar o raciocínio manual em etapas.
-
-Ou:
-
-> Estou considerando duas abordagens. Vou listar os trade-offs antes de escolher.
-
----
-
-# 20. SE O CÓDIGO DER ERRADO
-
-Dizer:
-
-> O teste mostrou que uma premissa minha estava errada. Vou verificar onde o comportamento divergiu.
-
-Depois:
-
-```text
-1. Ler a mensagem de erro.
-2. Confirmar a entrada.
-3. Verificar o ponto da falha.
-4. Corrigir uma coisa por vez.
-5. Rodar novamente.
-```
-
-Não apagar tudo imediatamente.
-
----
-
-# 21. COMO RECEBER SUGESTÕES
-
-## Quando concordar
-
-> Faz sentido. Sua sugestão reduz a complexidade dessa parte. Vou ajustar.
-
-## Quando houver trade-off
-
-> Essa alternativa melhora X, mas aumenta Y. Para este cenário, acho que vale seguir com ela porque...
-
-## Quando preferir manter
-
-> Entendi o ponto. Eu manteria esta abordagem neste momento porque precisamos de X, mas a alternativa seria válida se tivéssemos Y.
-
----
-
-# 22. FRASES PARA USAR DURANTE A SESSÃO
-
-## Para começar
-
-> Vou confirmar o entendimento e depois propor uma primeira abordagem.
-
-## Para explicar escolha
-
-> Estou escolhendo essa solução porque ela é simples, legível e atende aos requisitos atuais.
-
-## Para evitar exagero
-
-> Existe uma solução mais sofisticada, mas acho que adicionaria complexidade sem benefício neste momento.
-
-## Para envolver o par
-
-> Essa premissa faz sentido para você?
-
-## Para organizar
-
-> Vou fechar primeiro o fluxo principal e depois tratar os cenários de erro.
-
-## Para testar
-
-> Vou criar um exemplo pequeno para verificar se a lógica está correta.
-
-## Para refatorar
-
-> Agora que o comportamento está funcionando, vou melhorar nomes e responsabilidades.
-
-## Para falar de produção
-
-> Para produção, eu adicionaria observabilidade, validação mais robusta e testes de integração.
-
-## Para tempo curto
-
-> Para garantir uma entrega funcional, vou priorizar o caminho principal e explicar as evoluções depois.
-
----
-
-# 23. O QUE DEMONSTRA SENIORIDADE
-
-Não é saber toda API de memória.
-
-É demonstrar:
-
-- clareza;
-- pragmatismo;
-- boa comunicação;
-- código legível;
-- capacidade de priorizar;
-- preocupação com erros;
-- testes relevantes;
-- noção de segurança;
-- percepção de performance;
-- decisões proporcionais;
-- capacidade de ouvir;
-- tranquilidade diante de erros.
-
----
-
-# 24. O QUE EVITAR
-
-- Ficar em silêncio por muito tempo.
-- Começar a codar sem entender.
-- Criar arquitetura demais.
-- Colocar tudo no mesmo arquivo sem explicar.
-- Tentar implementar todos os cenários.
-- Otimizar antes de funcionar.
-- Usar abstrações sem necessidade.
-- Fingir que lembra algo.
-- Ignorar sugestões.
-- Pedir desculpas a cada erro.
-- Usar termos técnicos sem conectar ao problema.
-- Falar de produção sem entregar o exercício.
-
----
-
-# 25. CHECKLIST DA SESSÃO
-
-## Antes
-
-```text
-[ ] Node funcionando
-[ ] Gerenciador de pacotes funcionando
-[ ] Editor configurado
-[ ] TypeScript funcionando
-[ ] Testes funcionando
-[ ] Microfone testado
-[ ] Câmera testada
-[ ] Compartilhamento de tela testado
-[ ] Notificações desativadas
-[ ] Abas pessoais fechadas
-[ ] Terminal limpo
-[ ] Esta consulta aberta
-```
-
-## Durante
-
-```text
-[ ] Confirmei o problema
-[ ] Fiz perguntas relevantes
-[ ] Dei um exemplo
-[ ] Expliquei a abordagem
-[ ] Comecei simples
-[ ] Pensei em voz alta
-[ ] Envolvi o entrevistador
-[ ] Testei o cenário principal
-[ ] Tratei pelo menos um erro
-[ ] Expliquei trade-offs
-```
-
-## No final
-
-```text
-[ ] Rodei o código
-[ ] Recapitulei a solução
-[ ] Expliquei limitações
-[ ] Falei das melhorias de produção
-[ ] Perguntei se querem explorar outro cenário
-```
-
----
-
-# 26. FLUXO DE EMERGÊNCIA
-
-Quando eu não souber o que fazer, seguir exatamente isto:
-
-```text
-1. O que entra?
-2. O que deve sair?
-3. Qual é o exemplo mais simples?
-4. Como eu resolveria manualmente?
-5. Quais etapas eu executei?
-6. Como transformo cada etapa em função?
-7. Qual cenário pode quebrar?
-8. Como testo?
-```
-
-Frase para ganhar organização:
-
-> Vou voltar ao exemplo básico, decompor o problema e implementar uma etapa de cada vez.
-
----
-
-# 27. RESUMO DE UMA TELA
-
-```text
-ENTENDER
-O que entra, o que sai e quais são as regras?
-
-ALINHAR
-Confirmar premissas e restrições.
-
-EXEMPLIFICAR
-Criar um cenário simples e um cenário de erro.
-
-EXPLICAR
-Dizer qual abordagem será usada e por quê.
-
-IMPLEMENTAR
-Começar pelo caminho principal.
-
-VALIDAR
-Rodar, testar e comparar com o esperado.
-
-CORRIGIR
-Analisar erros sem esconder o raciocínio.
-
-REFATORAR
-Melhorar nomes e responsabilidades.
-
-ENCERRAR
-Explicar decisões, limitações e próximos passos.
-```
-
-## Lembrete final
-
-Eu não estou sendo avaliada por decorar tudo.
-
-Estou sendo avaliada por conseguir:
-
-```text
-entender
-↓
-organizar
-↓
-comunicar
-↓
-implementar
-↓
-validar
-↓
-adaptar
-```
-
-> Guia de consulta rápida para entrevistas Node.js + React (Senior/Especialista)
-
-## 📑 Índice
-
-- 🎯 Mentalidade
-- 🚀 Primeiros minutos
-- 🧩 Estratégia de resolução
-- 🟢 Node.js
-- ⚛️ React
-- 📘 TypeScript
-- 🧪 Testes
-- 🏛️ Arquitetura
-- 💬 Frases úteis
-- 🚨 Fluxo de emergência
-- ✅ Checklist
-
-1. PORQUE NO API USAMOS PRISMA?
-   Escolhi o Prisma como camada de acesso a dados porque ele fornece tipagem integrada ao TypeScript, migrations e uma API de consulta simples. Isso reduz código repetitivo e facilita a manutenção do CRUD. O Prisma fica apenas na API porque é ela que possui as regras de negócio e a responsabilidade sobre a persistência. Ainda assim, eu não considero o Prisma obrigatório; a escolha dependeria da complexidade das consultas, dos requisitos de performance e dos padrões já adotados pela equipe.
-
-Resumo
-PostgreSQL
-É onde os dados ficam armazenados.
-
-Prisma
-É a ferramenta que consulta e altera esses dados.
-
-NestJS
-Organiza a API, suas regras e endpoints.
-
-BFF
-Adapta a API para o frontend.
-
-React
-Exibe os dados e recebe interações.
-
-Para nosso projeto, o Prisma foi escolhido principalmente porque o objetivo é criar um modelo rápido de consultar, tipado e fácil de modificar, não porque seja a única forma correta de acessar o PostgreSQL.
-
-2. PORQUE USAR ENUM?
-   Porque o banco também garante que o status seja válido.
-
-Os valores possíveis serão:
-PENDING
-IN_PROGRESS
-COMPLETED
-
-No frontend podemos apresentá-los assim:
-PENDING → Pendente
-IN_PROGRESS → Em andamento
-COMPLETED → Concluída
-
-3. POSTGRESQL OU MYQL?
-   Para este projeto:
-
-| Critério                   |    PostgreSQL |     MySQL |
-| -------------------------- | ------------: | --------: |
-| CRUD comum                 |     Excelente | Excelente |
-| Tipos e recursos avançados | Mais completo |       Bom |
-| JSON                       |   Muito forte |       Bom |
-| Consultas complexas        |   Muito forte |       Bom |
-| Uso com Prisma             |     Excelente | Excelente |
-| Valor como referência      |     **Maior** |       Bom |
+UNLICENSED — uso privado.

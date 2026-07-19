@@ -1,6 +1,3 @@
-/**
- * Endpoints HTTP de Tasks — thin controller: valida entrada e delega ao service.
- */
 import {
   Body,
   Controller,
@@ -13,23 +10,21 @@ import {
   Patch,
   Post,
   Query,
-} from '@nestjs/common'
+} from '@nestjs/common';
 import {
+  ApiBadGatewayResponse,
   ApiBadRequestResponse,
   ApiCreatedResponse,
   ApiNoContentResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
-  ApiParam,
   ApiTags,
-} from '@nestjs/swagger'
-import { CreateTaskDto } from '../dto/create-task.dto.js'
-import { ListTasksQueryDto } from '../dto/list-tasks-query.dto.js'
-import { PaginatedTasksResponseDto } from '../dto/paginated-tasks-response.dto.js'
-import { TaskResponseDto } from '../dto/task-response.dto.js'
-import { UpdateTaskDto } from '../dto/update-task.dto.js'
-import { TasksService } from '../services/tasks.service.js'
+} from '@nestjs/swagger';
+import { CreateTaskDto } from '../dto/create-task.dto.js';
+import { ListTasksQueryDto } from '../dto/list-tasks-query.dto.js';
+import { UpdateTaskDto } from '../dto/update-task.dto.js';
+import { TasksService } from '../service/tasks.service.js';
 
 @ApiTags('Tasks')
 @Controller('tasks')
@@ -37,19 +32,20 @@ export class TasksController {
   constructor(private readonly tasksService: TasksService) {}
 
   @Post()
-  @HttpCode(HttpStatus.CREATED)
   @ApiOperation({
     summary: 'Criar uma tarefa',
   })
   @ApiCreatedResponse({
-    description: 'Tarefa criada com sucesso',
-    type: TaskResponseDto,
+    description: 'Tarefa criada',
   })
   @ApiBadRequestResponse({
-    description: 'Dados enviados são inválidos',
+    description: 'Dados inválidos',
+  })
+  @ApiBadGatewayResponse({
+    description: 'API indisponível',
   })
   create(@Body() input: CreateTaskDto) {
-    return this.tasksService.create(input)
+    return this.tasksService.create(input);
   }
 
   @Get()
@@ -58,62 +54,55 @@ export class TasksController {
   })
   @ApiOkResponse({
     description: 'Lista paginada de tarefas',
-    type: PaginatedTasksResponseDto,
   })
   @ApiBadRequestResponse({
-    description: 'Filtros ou paginação inválidos',
+    description: 'Parâmetros inválidos',
+  })
+  @ApiBadGatewayResponse({
+    description: 'API indisponível',
   })
   findAll(@Query() query: ListTasksQueryDto) {
-    return this.tasksService.findAll(query)
+    return this.tasksService.findAll(query);
   }
 
   @Get(':id')
   @ApiOperation({
     summary: 'Consultar uma tarefa',
   })
-  @ApiParam({
-    name: 'id',
-    description: 'UUID da tarefa',
-    format: 'uuid',
-  })
   @ApiOkResponse({
     description: 'Tarefa encontrada',
-    type: TaskResponseDto,
-  })
-  @ApiBadRequestResponse({
-    description: 'UUID inválido',
   })
   @ApiNotFoundResponse({
     description: 'Tarefa não encontrada',
   })
+  @ApiBadGatewayResponse({
+    description: 'API indisponível',
+  })
   findOne(@Param('id', new ParseUUIDPipe()) id: string) {
-    return this.tasksService.findOne(id)
+    return this.tasksService.findOne(id);
   }
 
   @Patch(':id')
   @ApiOperation({
     summary: 'Atualizar uma tarefa',
   })
-  @ApiParam({
-    name: 'id',
-    description: 'UUID da tarefa',
-    format: 'uuid',
-  })
   @ApiOkResponse({
     description: 'Tarefa atualizada',
-    type: TaskResponseDto,
-  })
-  @ApiBadRequestResponse({
-    description: 'UUID ou dados enviados são inválidos',
   })
   @ApiNotFoundResponse({
     description: 'Tarefa não encontrada',
+  })
+  @ApiBadRequestResponse({
+    description: 'Dados inválidos',
+  })
+  @ApiBadGatewayResponse({
+    description: 'API indisponível',
   })
   update(
     @Param('id', new ParseUUIDPipe()) id: string,
     @Body() input: UpdateTaskDto,
   ) {
-    return this.tasksService.update(id, input)
+    return this.tasksService.update(id, input);
   }
 
   @Delete(':id')
@@ -121,21 +110,16 @@ export class TasksController {
   @ApiOperation({
     summary: 'Excluir uma tarefa',
   })
-  @ApiParam({
-    name: 'id',
-    description: 'UUID da tarefa',
-    format: 'uuid',
-  })
   @ApiNoContentResponse({
     description: 'Tarefa excluída',
-  })
-  @ApiBadRequestResponse({
-    description: 'UUID inválido',
   })
   @ApiNotFoundResponse({
     description: 'Tarefa não encontrada',
   })
+  @ApiBadGatewayResponse({
+    description: 'API indisponível',
+  })
   remove(@Param('id', new ParseUUIDPipe()) id: string) {
-    return this.tasksService.remove(id)
+    return this.tasksService.remove(id);
   }
 }

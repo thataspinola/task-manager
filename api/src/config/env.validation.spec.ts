@@ -45,4 +45,13 @@ describe('envValidationSchema', () => {
     expect(error).toBeDefined()
     expect(error?.details[0]?.path).toContain('PORT')
   })
+
+  it('rejects a non-postgres DATABASE_URL', () => {
+    const { error } = envValidationSchema.validate({
+      DATABASE_URL: 'mysql://localhost/db',
+    })
+
+    expect(error).toBeDefined()
+    expect(error?.details[0]?.path).toContain('DATABASE_URL')
+  })
 })

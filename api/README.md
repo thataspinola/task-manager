@@ -1,98 +1,340 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# Task Manager API
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+API REST para gerenciamento de tarefas, desenvolvida com NestJS, Prisma ORM e PostgreSQL.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+## Tecnologias
 
-## Description
+- Node.js
+- TypeScript
+- NestJS
+- Prisma ORM
+- PostgreSQL
+- Swagger/OpenAPI
+- Joi
+- Jest
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+## Arquitetura
 
-## Project setup
-
-```bash
-$ npm install
+```text
+Controller
+   ↓
+DTO e validação
+   ↓
+Service
+   ↓
+Repository (DIP)
+   ↓
+PrismaService
+   ↓
+PostgreSQL
 ```
 
-## Compile and run the project
+Esta API faz parte de uma arquitetura composta por:
 
-```bash
-# development
-$ npm run start
-
-# watch mode
-$ npm run start:dev
-
-# production mode
-$ npm run start:prod
+```text
+React Frontend
+      ↓
+NestJS BFF
+      ↓
+NestJS API
+      ↓
+PostgreSQL
 ```
 
-## Run tests
+O frontend não deve acessar esta API diretamente. A integração será intermediada pelo BFF.
 
-```bash
-# unit tests
-$ npm run test
+## Funcionalidades
 
-# e2e tests
-$ npm run test:e2e
+- Criar tarefas
+- Listar tarefas
+- Consultar tarefa por ID
+- Atualizar tarefas
+- Excluir tarefas
+- Filtrar por status
+- Buscar por título ou descrição
+- Paginação
+- Validação dos dados de entrada
+- Validação das variáveis de ambiente
+- Health check da aplicação e do banco
+- Documentação Swagger
+- Tratamento global de erros
+- Seed do banco
+- Testes unitários
 
-# test coverage
-$ npm run test:cov
+## Modelo de tarefa
+
+```text
+Task
+├── id
+├── title
+├── description
+├── status
+├── createdAt
+└── updatedAt
 ```
 
-## Deployment
+Status disponíveis:
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
-
-```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
+```text
+PENDING
+IN_PROGRESS
+COMPLETED
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+## Requisitos
 
-## Resources
+- Node.js
+- npm
+- PostgreSQL
+- Banco local `task_manager`
 
-Check out a few resources that may come in handy when working with NestJS:
+## Instalação
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+Instale as dependências:
 
-## Support
+```bash
+npm install
+```
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+## Configuração do ambiente
 
-## Stay in touch
+Copie o arquivo de exemplo:
 
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+```bash
+cp .env.example .env
+```
 
-## License
+No Windows PowerShell:
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+```powershell
+Copy-Item .env.example .env
+```
+
+Configure o `.env`:
+
+```env
+NODE_ENV=development
+PORT=3001
+DATABASE_URL="postgresql://postgres:SUA_SENHA@localhost:5432/task_manager?schema=public"
+```
+
+## Criar o banco
+
+No PostgreSQL:
+
+```sql
+CREATE DATABASE task_manager;
+```
+
+## Prisma
+
+Validar o schema:
+
+```bash
+npx prisma validate
+```
+
+Gerar o Prisma Client:
+
+```bash
+npm run prisma:generate
+```
+
+Criar ou executar migrations:
+
+```bash
+npm run prisma:migrate
+```
+
+Executar o seed:
+
+```bash
+npm run prisma:seed
+```
+
+Abrir o Prisma Studio:
+
+```bash
+npm run prisma:studio
+```
+
+## Executar a aplicação
+
+Modo de desenvolvimento:
+
+```bash
+npm run start:dev
+```
+
+Build:
+
+```bash
+npm run build
+```
+
+Produção:
+
+```bash
+npm run start:prod
+```
+
+## Endereços
+
+API:
+
+```text
+http://localhost:3001/api
+```
+
+Swagger:
+
+```text
+http://localhost:3001/api/docs
+```
+
+Health check:
+
+```text
+http://localhost:3001/api/health
+```
+
+## Endpoints
+
+| Método | Endpoint         | Descrição                   |
+| ------ | ---------------- | --------------------------- |
+| POST   | `/api/tasks`     | Criar tarefa                |
+| GET    | `/api/tasks`     | Listar tarefas              |
+| GET    | `/api/tasks/:id` | Consultar tarefa            |
+| PATCH  | `/api/tasks/:id` | Atualizar tarefa            |
+| DELETE | `/api/tasks/:id` | Excluir tarefa              |
+| GET    | `/api/health`    | Verificar aplicação e banco |
+
+## Criar uma tarefa
+
+```bash
+curl -X POST http://localhost:3001/api/tasks \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "Finalizar API",
+    "description": "Adicionar documentação",
+    "status": "IN_PROGRESS"
+  }'
+```
+
+## Listar tarefas
+
+```bash
+curl "http://localhost:3001/api/tasks?page=1&limit=10"
+```
+
+## Filtrar por status
+
+```bash
+curl "http://localhost:3001/api/tasks?status=PENDING"
+```
+
+## Buscar por texto
+
+```bash
+curl "http://localhost:3001/api/tasks?search=NestJS"
+```
+
+## Atualizar uma tarefa
+
+```bash
+curl -X PATCH http://localhost:3001/api/tasks/UUID \
+  -H "Content-Type: application/json" \
+  -d '{
+    "status": "COMPLETED"
+  }'
+```
+
+## Excluir uma tarefa
+
+```bash
+curl -i -X DELETE http://localhost:3001/api/tasks/UUID
+```
+
+## Testes
+
+Executar os testes:
+
+```bash
+npm test
+```
+
+Executar em modo watch:
+
+```bash
+npm run test:watch
+```
+
+Executar com cobertura:
+
+```bash
+npm run test:cov
+```
+
+## Estrutura
+
+```text
+api/
+├── prisma/
+│   ├── migrations/
+│   ├── schema.prisma
+│   └── seed.ts
+│
+├── src/
+│   ├── bootstrap/
+│   │   └── create-app.ts
+│   ├── common/
+│   │   ├── database/
+│   │   └── filters/
+│   │       └── all-exceptions.filter.ts
+│   ├── config/
+│   ├── generated/prisma/
+│   ├── health/
+│   ├── tasks/
+│   │   ├── constants/
+│   │   ├── controller/
+│   │   ├── dto/
+│   │   ├── repositories/
+│   │   ├── services/
+│   │   └── task.module.ts
+│   ├── app.module.ts
+│   └── main.ts
+│
+├── test/
+├── .env.example
+├── package.json
+├── prisma.config.ts
+└── README.md
+```
+
+## Respostas de erro
+
+Exemplo de erro de validação:
+
+```json
+{
+  "statusCode": 400,
+  "error": "Bad Request",
+  "message": ["title must be longer than or equal to 3 characters"],
+  "path": "/api/tasks",
+  "method": "POST",
+  "timestamp": "2026-07-18T20:00:00.000Z"
+}
+```
+
+Exemplo de recurso não encontrado:
+
+```json
+{
+  "statusCode": 404,
+  "error": "Not Found",
+  "message": "Task não encontrada",
+  "path": "/api/tasks/uuid",
+  "method": "GET",
+  "timestamp": "2026-07-18T20:00:00.000Z"
+}
+```
