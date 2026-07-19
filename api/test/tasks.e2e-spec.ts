@@ -6,9 +6,30 @@ import { configureApp } from '../src/bootstrap/create-app.js'
 import { PrismaService } from '../src/common/database/prisma.service.js'
 import { TaskStatus } from '../src/generated/prisma/enums.js'
 
+type SuperTestServer = Parameters<typeof request>[0]
+
+type TaskBody = {
+  id: string
+  title: string
+  description: string | null
+  status: TaskStatus
+}
+
+type PaginatedBody = {
+  data: TaskBody[]
+  meta: {
+    page: number
+    limit: number
+    total: number
+    totalPages: number
+  }
+}
+
 describe('Tasks API (e2e)', () => {
   let app: INestApplication
   let prisma: PrismaService
+
+  const server = (): SuperTestServer => app.getHttpServer() as SuperTestServer
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -31,7 +52,7 @@ describe('Tasks API (e2e)', () => {
   })
 
   it('creates, lists, reads, updates and deletes a task (functional flow)', async () => {
-    const createResponse = await request(app.getHttpServer())
+    const createResponse = await request(server())
       .post('/api/tasks')
       .send({
         title: 'Write tests',
@@ -40,30 +61,31 @@ describe('Tasks API (e2e)', () => {
       })
       .expect(201)
 
-    expect(createResponse.body).toMatchObject({
+    const created = createResponse.body as TaskBody
+
+    expect(created).toMatchObject({
       title: 'Write tests',
       description: 'Cover the tasks module',
       status: TaskStatus.PENDING,
     })
 
-    const taskId = createResponse.body.id as string
+    const taskId = created.id
 
-    const listResponse = await request(app.getHttpServer())
-      .get('/api/tasks')
-      .expect(200)
+    const listResponse = await request(server()).get('/api/tasks').expect(200)
+    const listed = listResponse.body as PaginatedBody
 
-    expect(listResponse.body.data).toHaveLength(1)
-    expect(listResponse.body.meta).toMatchObject({
+    expect(listed.data).toHaveLength(1)
+    expect(listed.meta).toMatchObject({
       page: 1,
       limit: 10,
       total: 1,
       totalPages: 1,
     })
-    expect(listResponse.body.data[0].id).toBe(taskId)
+    expect(listed.data[0].id).toBe(taskId)
 
-    await request(app.getHttpServer()).get(`/api/tasks/${taskId}`).expect(200)
+    await request(server()).get(`/api/tasks/${taskId}`).expect(200)
 
-    const updateResponse = await request(app.getHttpServer())
+    const updateResponse = await request(server())
       .patch(`/api/tasks/${taskId}`)
       .send({
         title: 'Write better tests',
@@ -71,17 +93,15 @@ describe('Tasks API (e2e)', () => {
       })
       .expect(200)
 
-    expect(updateResponse.body).toMatchObject({
+    expect(updateResponse.body as TaskBody).toMatchObject({
       id: taskId,
       title: 'Write better tests',
       status: TaskStatus.COMPLETED,
     })
 
-    await request(app.getHttpServer())
-      .delete(`/api/tasks/${taskId}`)
-      .expect(204)
+    await request(server()).delete(`/api/tasks/${taskId}`).expect(204)
 
-    const missing = await request(app.getHttpServer())
+    const missing = await request(server())
       .get(`/api/tasks/${taskId}`)
       .expect(404)
 
@@ -93,7 +113,7 @@ describe('Tasks API (e2e)', () => {
   })
 
   it('rejects invalid create payloads', async () => {
-    const shortTitle = await request(app.getHttpServer())
+    const shortTitle = await request(server())
       .post('/api/tasks')
       .send({ title: 'ab' })
       .expect(400)
@@ -105,7 +125,7 @@ describe('Tasks API (e2e)', () => {
       method: 'POST',
     })
 
-    await request(app.getHttpServer())
+    await request(server())
       .post('/api/tasks')
       .send({ title: 'Valid title', unknownField: true })
       .expect(400)
@@ -114,51 +134,46 @@ describe('Tasks API (e2e)', () => {
   it('returns 404 for unknown task ids', async () => {
     const unknownId = '00000000-0000-0000-0000-000000000000'
 
-    await request(app.getHttpServer()).get(`/api/tasks/${unknownId}`).expect(404)
-    await request(app.getHttpServer())
+    await request(server()).get(`/api/tasks/${unknownId}`).expect(404)
+    await request(server())
       .patch(`/api/tasks/${unknownId}`)
       .send({ title: 'Nope' })
       .expect(404)
-    await request(app.getHttpServer())
-      .delete(`/api/tasks/${unknownId}`)
-      .expect(404)
+    await request(server()).delete(`/api/tasks/${unknownId}`).expect(404)
   })
 
   it('returns 400 for invalid uuid ids', async () => {
-    await request(app.getHttpServer()).get('/api/tasks/not-a-uuid').expect(400)
-    await request(app.getHttpServer())
+    await request(server()).get('/api/tasks/not-a-uuid').expect(400)
+    await request(server())
       .patch('/api/tasks/not-a-uuid')
       .send({ title: 'Nope' })
       .expect(400)
-    await request(app.getHttpServer())
-      .delete('/api/tasks/not-a-uuid')
-      .expect(400)
+    await request(server()).delete('/api/tasks/not-a-uuid').expect(400)
   })
 
   it('filters tasks by status and search', async () => {
-    await request(app.getHttpServer())
+    await request(server())
       .post('/api/tasks')
       .send({ title: 'Alpha task', status: TaskStatus.PENDING })
       .expect(201)
 
-    await request(app.getHttpServer())
+    await request(server())
       .post('/api/tasks')
       .send({ title: 'Beta done', status: TaskStatus.COMPLETED })
       .expect(201)
 
-    const response = await request(app.getHttpServer())
+    const response = await request(server())
       .get('/api/tasks')
       .query({ status: TaskStatus.PENDING, search: 'Alpha' })
       .expect(200)
 
-    expect(response.body.data).toHaveLength(1)
-    expect(response.body.data[0].title).toBe('Alpha task')
+    const body = response.body as PaginatedBody
+    expect(body.data).toHaveLength(1)
+    expect(body.data[0].title).toBe('Alpha task')
   })
 
   it('returns health ok when database is available', async () => {
-    const response = await request(app.getHttpServer())
-      .get('/api/health')
-      .expect(200)
+    const response = await request(server()).get('/api/health').expect(200)
 
     expect(response.body).toMatchObject({
       status: 'ok',
@@ -167,6 +182,6 @@ describe('Tasks API (e2e)', () => {
   })
 
   it('exposes swagger docs', async () => {
-    await request(app.getHttpServer()).get('/api/docs').expect(200)
+    await request(server()).get('/api/docs').expect(200)
   })
 })

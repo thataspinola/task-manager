@@ -9,7 +9,9 @@ jest.mock('../../generated/prisma/client.js', () => {
     $connect = jest.fn().mockResolvedValue(undefined)
     $disconnect = jest.fn().mockResolvedValue(undefined)
 
-    constructor(_options?: unknown) {}
+    constructor(options?: unknown) {
+      void options
+    }
   }
 
   return { PrismaClient: MockPrismaClient }
@@ -20,9 +22,7 @@ import { PrismaPg } from '@prisma/adapter-pg'
 import { PrismaService } from './prisma.service.js'
 
 describe('PrismaService', () => {
-  const createConfigService = (
-    databaseUrl?: string,
-  ): ConfigService =>
+  const createConfigService = (databaseUrl?: string): ConfigService =>
     ({
       get: jest.fn().mockReturnValue(databaseUrl),
     }) as unknown as ConfigService

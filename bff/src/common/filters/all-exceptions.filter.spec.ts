@@ -54,7 +54,10 @@ describe('AllExceptionsFilter', () => {
   });
 
   it('maps HttpException string responses', () => {
-    filter.catch(new HttpException('plain', HttpStatus.FORBIDDEN), createHost());
+    filter.catch(
+      new HttpException('plain', HttpStatus.FORBIDDEN),
+      createHost(),
+    );
 
     expect(json).toHaveBeenCalledWith(
       expect.objectContaining({

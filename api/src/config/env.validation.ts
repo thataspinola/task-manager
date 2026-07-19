@@ -14,4 +14,6 @@ export const envValidationSchema = Joi.object({
     .required(),
   // Lista separada por vírgula; vazio ou "*" libera qualquer origem (dev)
   CORS_ORIGIN: Joi.string().allow('').optional(),
+  SENTRY_DSN: Joi.string().uri().allow('').optional(),
+  SENTRY_TRACES_SAMPLE_RATE: Joi.number().min(0).max(1).default(0.1),
 })

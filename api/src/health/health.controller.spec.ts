@@ -4,16 +4,21 @@ import { HttpStatus } from '@nestjs/common'
 import { Test, TestingModule } from '@nestjs/testing'
 import type { Response } from 'express'
 import { PrismaService } from '../common/database/prisma.service.js'
+import { HealthMetricsService } from '../metrics/health-metrics.service.js'
 import { HealthController } from './health.controller.js'
 
 describe('HealthController', () => {
   let controller: HealthController
   let prisma: { $queryRaw: jest.Mock }
+  let healthMetrics: { setComponentHealth: jest.Mock }
   let res: { status: jest.Mock }
 
   beforeEach(async () => {
     prisma = {
       $queryRaw: jest.fn().mockResolvedValue([{ '?column?': 1 }]),
+    }
+    healthMetrics = {
+      setComponentHealth: jest.fn(),
     }
     res = {
       status: jest.fn().mockReturnThis(),
@@ -21,7 +26,10 @@ describe('HealthController', () => {
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [HealthController],
-      providers: [{ provide: PrismaService, useValue: prisma }],
+      providers: [
+        { provide: PrismaService, useValue: prisma },
+        { provide: HealthMetricsService, useValue: healthMetrics },
+      ],
     }).compile()
 
     controller = module.get(HealthController)
@@ -32,6 +40,10 @@ describe('HealthController', () => {
 
     expect(prisma.$queryRaw).toHaveBeenCalled()
     expect(res.status).not.toHaveBeenCalled()
+    expect(healthMetrics.setComponentHealth).toHaveBeenCalledWith(
+      'database',
+      true,
+    )
     expect(result).toMatchObject({
       status: 'ok',
       database: 'connected',
@@ -45,6 +57,10 @@ describe('HealthController', () => {
     const result = await controller.check(res as unknown as Response)
 
     expect(res.status).toHaveBeenCalledWith(HttpStatus.SERVICE_UNAVAILABLE)
+    expect(healthMetrics.setComponentHealth).toHaveBeenCalledWith(
+      'database',
+      false,
+    )
     expect(result).toMatchObject({
       status: 'degraded',
       database: 'disconnected',

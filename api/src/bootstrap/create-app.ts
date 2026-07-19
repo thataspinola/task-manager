@@ -2,10 +2,7 @@
  * Factory / bootstrap compartilhado (produção, e2e e testes).
  * Centraliza prefixo `/api`, CORS, ValidationPipe, filter, Swagger e listen.
  */
-import {
-  INestApplication,
-  ValidationPipe,
-} from '@nestjs/common'
+import { INestApplication, ValidationPipe } from '@nestjs/common'
 import type { CorsOptions } from '@nestjs/common/interfaces/external/cors-options.interface.js'
 import { ConfigService } from '@nestjs/config'
 import { NestFactory } from '@nestjs/core'
@@ -37,7 +34,10 @@ export function resolveCorsOptions(
   }
 
   return {
-    origin: origin.split(',').map((value) => value.trim()).filter(Boolean),
+    origin: origin
+      .split(',')
+      .map(value => value.trim())
+      .filter(Boolean),
   }
 }
 

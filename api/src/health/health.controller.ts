@@ -6,6 +6,7 @@ import { Controller, Get, HttpStatus, Res } from '@nestjs/common'
 import { ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger'
 import type { Response } from 'express'
 import { PrismaService } from '../common/database/prisma.service.js'
+import { HealthMetricsService } from '../metrics/health-metrics.service.js'
 
 export type HealthResponse = {
   status: 'ok' | 'degraded'
@@ -16,7 +17,10 @@ export type HealthResponse = {
 @ApiTags('Health')
 @Controller('health')
 export class HealthController {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly healthMetrics: HealthMetricsService,
+  ) {}
 
   @Get()
   @ApiOperation({
@@ -39,6 +43,8 @@ export class HealthController {
 
     try {
       await this.prisma.$queryRaw`SELECT 1`
+      this.healthMetrics.setComponentHealth('database', true)
+      this.healthMetrics.setComponentHealth('app', true)
 
       return {
         status: 'ok',
@@ -46,6 +52,8 @@ export class HealthController {
         timestamp,
       }
     } catch {
+      this.healthMetrics.setComponentHealth('database', false)
+      this.healthMetrics.setComponentHealth('app', false)
       res.status(HttpStatus.SERVICE_UNAVAILABLE)
 
       return {

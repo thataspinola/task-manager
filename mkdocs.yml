@@ -1,0 +1,87 @@
+site_name: Task Manager
+site_description: Documentação do monorepo Task Manager (API, BFF e Frontend)
+site_author: Task Manager
+site_url: https://thataspinola.github.io/task-manager/
+
+repo_name: thataspinola/task-manager
+repo_url: https://github.com/thataspinola/task-manager
+edit_uri: edit/main/docs/
+
+docs_dir: docs
+site_dir: site
+
+theme:
+  name: material
+  language: pt
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: teal
+      accent: amber
+      toggle:
+        icon: material/brightness-7
+        name: Modo escuro
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: teal
+      accent: amber
+      toggle:
+        icon: material/brightness-4
+        name: Modo claro
+  font:
+    text: Source Sans 3
+    code: JetBrains Mono
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - navigation.footer
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.tabs.link
+    - toc.follow
+
+plugins:
+  - search:
+      lang: pt
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.tabbed:
+      alternate_style: true
+
+nav:
+  - Início: index.md
+  - Arquitetura: arquitetura.md
+  - Começar: comecar.md
+  - API:
+      - Visão geral: api/index.md
+      - Endpoints: api/endpoints.md
+  - BFF:
+      - Visão geral: bff/index.md
+      - Endpoints: bff/endpoints.md
+  - Frontend: front/index.md
+  - Testes: testes.md
+  - CI/CD: ci-cd.md
+  - Observabilidade: observabilidade.md
+  - Decisões técnicas: decisoes.md
+  - Histórico de pushes: historico/index.md
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/thataspinola/task-manager

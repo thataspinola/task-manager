@@ -58,7 +58,10 @@ describe('AllExceptionsFilter', () => {
   })
 
   it('maps HttpException string responses', () => {
-    filter.catch(new HttpException('plain message', HttpStatus.FORBIDDEN), createHost())
+    filter.catch(
+      new HttpException('plain message', HttpStatus.FORBIDDEN),
+      createHost(),
+    )
 
     expect(status).toHaveBeenCalledWith(HttpStatus.FORBIDDEN)
     expect(json).toHaveBeenCalledWith(
@@ -107,7 +110,10 @@ describe('AllExceptionsFilter', () => {
   })
 
   it('maps custom status codes without named errors', () => {
-    filter.catch(new HttpException('teapot', HttpStatus.I_AM_A_TEAPOT), createHost())
+    filter.catch(
+      new HttpException('teapot', HttpStatus.I_AM_A_TEAPOT),
+      createHost(),
+    )
 
     expect(json).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -157,12 +163,18 @@ describe('AllExceptionsFilter', () => {
   })
 
   it('resolves named status codes for auth/validation', () => {
-    filter.catch(new HttpException('nope', HttpStatus.BAD_REQUEST), createHost())
+    filter.catch(
+      new HttpException('nope', HttpStatus.BAD_REQUEST),
+      createHost(),
+    )
     expect(json).toHaveBeenCalledWith(
       expect.objectContaining({ error: 'Bad Request' }),
     )
 
-    filter.catch(new HttpException('nope', HttpStatus.UNAUTHORIZED), createHost())
+    filter.catch(
+      new HttpException('nope', HttpStatus.UNAUTHORIZED),
+      createHost(),
+    )
     expect(json).toHaveBeenCalledWith(
       expect.objectContaining({ error: 'Unauthorized' }),
     )

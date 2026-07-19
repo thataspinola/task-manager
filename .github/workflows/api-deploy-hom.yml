@@ -1,0 +1,289 @@
+name: API - Deploy Homol
+
+on:
+  push:
+    branches:
+      - "release/**"
+    paths:
+      - 'api/**'
+      - '.github/workflows/api-*.yml'
+  workflow_dispatch:
+    inputs:
+      release_branch:
+        description: "Branch, ex.: release/1.2.3"
+        required: true
+        type: string
+      target_sha:
+        description: "SHA opcional (vazio - último commit da branch)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: api-deploy-hom-${{ github.ref_name }}-${{ github.sha }}
+  cancel-in-progress: true
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+defaults:
+  run:
+    working-directory: api
+
+jobs:
+  prepare:
+    name: "1/7 - Prepare"
+    runs-on: ubuntu-latest
+    outputs:
+      should_run: ${{ steps.prepare.outputs.should_run }}
+      target_sha: ${{ steps.prepare.outputs.target_sha }}
+      release_branch: ${{ steps.prepare.outputs.release_branch }}
+      promote_branch: ${{ steps.prepare.outputs.promote_branch }}
+    steps:
+      - name: Decide if workflow should continue
+        id: prepare
+        shell: bash
+        working-directory: .
+        env:
+          DISPATCH_RELEASE: ${{ github.event_name == 'workflow_dispatch' && inputs.release_branch || '' }}
+          DISPATCH_SHA: ${{ github.event_name == 'workflow_dispatch' && inputs.target_sha || '' }}
+        run: |
+          set -euo pipefail
+          EVENT="${{ github.event_name }}"
+
+          if [ "$EVENT" = "push" ]; then
+            REL="${{ github.ref_name }}"
+            case "$REL" in
+              release/*) ;;
+              *)
+                echo "should_run=false" >> "$GITHUB_OUTPUT"
+                exit 0
+                ;;
+            esac
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+            echo "release_branch=$REL" >> "$GITHUB_OUTPUT"
+            VERSION="${REL#release/}"
+            echo "promote_branch=promote/${VERSION}" >> "$GITHUB_OUTPUT"
+            echo "target_sha=${{ github.sha }}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+            REL="${DISPATCH_RELEASE:?release_branch é obrigatório}"
+            case "$REL" in
+              release/*) ;;
+              *)
+                echo "should_run=false" >> "$GITHUB_OUTPUT"
+                exit 0
+                ;;
+            esac
+            if [ -n "${DISPATCH_SHA:-}" ]; then
+              TIP="$DISPATCH_SHA"
+            else
+              TIP="$(gh api "repos/${{ github.repository }}/commits" -f sha="$REL" -f per_page=1 --jq '.[0].sha')"
+            fi
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+            echo "release_branch=$REL" >> "$GITHUB_OUTPUT"
+            VERSION="${REL#release/}"
+            echo "promote_branch=promote/${VERSION}" >> "$GITHUB_OUTPUT"
+            echo "target_sha=$TIP" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "should_run=false" >> "$GITHUB_OUTPUT"
+
+  lint:
+    name: "2/7 - Lint"
+    runs-on: ubuntu-latest
+    needs: prepare
+    if: ${{ needs.prepare.outputs.should_run == 'true' }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.prepare.outputs.target_sha }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: api/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - run: npm run lint
+      - run: npm run format:check
+
+  build:
+    name: "3/7 - Build"
+    runs-on: ubuntu-latest
+    needs: [prepare, lint]
+    if: ${{ needs.prepare.outputs.should_run == 'true' }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.prepare.outputs.target_sha }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: api/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - run: npm run build
+
+  test:
+    name: "4/7 - Test"
+    runs-on: ubuntu-latest
+    needs: [prepare, lint, build]
+    if: ${{ needs.prepare.outputs.should_run == 'true' }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.prepare.outputs.target_sha }}
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: api/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - name: Test
+        run: npm test
+
+  cleanup-promote:
+    name: "5/7 - Delete promote branch"
+    runs-on: ubuntu-latest
+    needs: [prepare, test]
+    if: ${{ needs.prepare.outputs.should_run == 'true' && needs.prepare.outputs.promote_branch != '' && needs.test.result == 'success' }}
+    env:
+      GH_TOKEN: ${{ secrets.AUTOMATION_TOKEN || github.token }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.AUTOMATION_TOKEN || github.token }}
+      - name: Delete promote branch
+        shell: bash
+        working-directory: .
+        run: |
+          set -euo pipefail
+          BRANCH="${{ needs.prepare.outputs.promote_branch }}"
+          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git"
+          git push origin --delete "$BRANCH" || true
+
+  create-main-pr:
+    name: "6/7 - Create or update PR to main"
+    runs-on: ubuntu-latest
+    needs: [prepare, test]
+    if: ${{ needs.prepare.outputs.should_run == 'true' }}
+    env:
+      GH_TOKEN: ${{ secrets.AUTOMATION_TOKEN || github.token }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.prepare.outputs.release_branch }}
+          fetch-depth: 0
+          token: ${{ secrets.AUTOMATION_TOKEN || github.token }}
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: api/package-lock.json
+
+      - run: npm ci --no-audit --no-fund
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Merge main into release and align npm version
+        shell: bash
+        working-directory: .
+        env:
+          RELEASE_BRANCH: ${{ needs.prepare.outputs.release_branch }}
+        run: |
+          set -euo pipefail
+          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git"
+          git fetch origin main
+
+          if git merge-base --is-ancestor origin/main HEAD; then
+            echo "release já contém o tip de main — sem merge."
+          else
+            set +e
+            git merge origin/main -m "chore: merge main into ${RELEASE_BRANCH} before PR to main [skip ci]"
+            MERGE_EXIT=$?
+            set -e
+            if [ "$MERGE_EXIT" -ne 0 ]; then
+              if ! git rev-parse -q --verify MERGE_HEAD >/dev/null 2>&1; then
+                echo "::error::git merge falhou sem estado de conflito (sem MERGE_HEAD)."
+                exit 1
+              fi
+              UNRESOLVED="$(git diff --name-only --diff-filter=U || true)"
+              echo "Ficheiros em conflito: ${UNRESOLVED}"
+              for f in $UNRESOLVED; do
+                case "$f" in
+                  api/package.json|api/package-lock.json) ;;
+                  *)
+                    echo "::error::Conflito em '${f}' — só api/package.json / package-lock.json são resolvidos automaticamente."
+                    git merge --abort || true
+                    exit 1
+                    ;;
+                esac
+              done
+              if [ ! -f "${{ github.workspace }}/scripts/resolve-merge-package-version.js" ]; then
+                echo "::error::Conflito em package.json sem scripts/resolve-merge-package-version.js no repositório."
+                git merge --abort || true
+                exit 1
+              fi
+              cp "${{ github.workspace }}/scripts/resolve-merge-package-version.js" /tmp/resolve-merge-package-version.js
+              (cd /tmp && GIT_WORK_TREE="${{ github.workspace }}" node /tmp/resolve-merge-package-version.js)
+              git commit -m "chore: merge main into ${RELEASE_BRANCH} (versão npm alinhada) [skip ci]"
+            fi
+          fi
+
+          git push origin "${RELEASE_BRANCH}"
+
+      - name: Create or update PR
+        shell: bash
+        working-directory: .
+        env:
+          GH_TOKEN: ${{ secrets.AUTOMATION_TOKEN || github.token }}
+        run: |
+          set -euo pipefail
+          REPO="${{ github.repository }}"
+          RELEASE="${{ needs.prepare.outputs.release_branch }}"
+          VERSION="${RELEASE#release/}"
+
+          git fetch origin main
+          AHEAD="$(git rev-list --count origin/main..HEAD)"
+          echo "Commits em ${RELEASE} à frente de main: ${AHEAD}"
+
+          PR_NUMBER="$(gh pr list --repo "$REPO" --state open --base main --head "$RELEASE" --json number --jq '.[0].number // empty')"
+
+          BODY="PR automático após validação em HOM. **main** foi integrado em **${RELEASE}** antes deste PR para evitar conflitos de versão em \`package.json\` (usa-se sempre a semver mais alta entre as linhas). O merge em **main** dispara o fluxo de PROD."
+
+          if [ "$AHEAD" -eq 0 ]; then
+            echo "::notice::Não há commits únicos em ${RELEASE} relativamente a main — não é necessário PR release→main (provavelmente já alinhado após merge de main)."
+            if [ -n "$PR_NUMBER" ]; then
+              gh pr close "$PR_NUMBER" --repo "$REPO" --comment "Fechado automaticamente: **${RELEASE}** não tem commits à frente de **main** (nada a promover)."
+            fi
+            exit 0
+          fi
+
+          if [ -n "$PR_NUMBER" ]; then
+            gh pr edit "$PR_NUMBER" --repo "$REPO" --title "release/${VERSION} → main" --body "$BODY"
+            exit 0
+          fi
+
+          gh pr create --repo "$REPO" --base main --head "$RELEASE" --title "release/${VERSION} → main" --body "$BODY"
+
+  finish:
+    name: "7/7 - Finish"
+    runs-on: ubuntu-latest
+    needs: [prepare, create-main-pr]
+    if: ${{ needs.prepare.outputs.should_run == 'true' }}
+    steps:
+      - run: echo "Fluxo HOM concluído."
+        working-directory: .

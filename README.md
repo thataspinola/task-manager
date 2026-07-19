@@ -19,10 +19,12 @@ O frontend **não** fala com a API diretamente. O BFF adapta contratos, agrega c
 5. [Modelo de domínio](#modelo-de-domínio)
 6. [Como subir o projeto](#como-subir-o-projeto)
 7. [Endpoints](#endpoints)
-8. [Princípios de código](#princípios-de-código)
-9. [Testes](#testes)
-10. [Decisões técnicas](#decisões-técnicas)
-11. [Documentação por pacote](#documentação-por-pacote)
+8. [Observabilidade](#observabilidade)
+9. [Princípios de código](#princípios-de-código)
+10. [Testes](#testes)
+11. [CI/CD e GitHub Pages](#cicd-e-github-pages)
+12. [Decisões técnicas](#decisões-técnicas)
+13. [Documentação](#documentação)
 
 ---
 
@@ -39,9 +41,11 @@ O frontend **não** fala com a API diretamente. O BFF adapta contratos, agrega c
 
 | Pacote | Status |
 | ------ | ------ |
-| [api](./api) | Pronto: CRUD, paginação, filtros, health, Swagger, testes (unit/integração/e2e) |
-| [bff](./bff) | Pronto: proxy HTTP de tasks + health + Swagger + testes (unit/integração/e2e) |
+| [api](./api) | Pronto: CRUD, paginação, filtros, health, metrics, Swagger, Sentry opcional, testes |
+| [bff](./bff) | Pronto: proxy HTTP, health, metrics, Swagger, Sentry opcional, testes |
 | `front/` | Pasta reservada (Vite/React previsto na porta `5173`) |
+| [observability/](./observability) | SonarQube Community + Prometheus + Grafana + Alertmanager (Docker) |
+| [docs/](./docs) | MkDocs → GitHub Pages |
 
 ---
 
@@ -98,25 +102,33 @@ Controller (HTTP)
 ```text
 task-manager/
 ├── api/                 # API de domínio (NestJS + Prisma)
-│   ├── prisma/          # schema, migrations, seed
+│   ├── prisma/
 │   ├── src/
-│   │   ├── bootstrap/   # create-app (CORS, pipes, filter, Swagger)
-│   │   ├── common/      # Prisma + exception filter
-│   │   ├── config/      # validação de env (Joi)
+│   │   ├── bootstrap/
+│   │   ├── common/
+│   │   ├── config/
 │   │   ├── health/
-│   │   ├── tasks/       # controller / service / repository / dto
-│   │   └── generated/   # Prisma Client gerado
-│   └── test/            # integração + e2e
+│   │   ├── metrics/     # Prometheus (/api/metrics)
+│   │   ├── observability/  # Sentry opcional
+│   │   ├── tasks/
+│   │   └── generated/
+│   ├── sonar-project.properties
+│   └── test/
 ├── bff/                 # Backend for Frontend (NestJS + Axios)
 │   ├── src/
-│   │   ├── bootstrap/   # create-app (CORS, pipes, Swagger)
-│   │   ├── common/      # exception filter
-│   │   ├── config/      # validação de env (Joi)
-│   │   ├── http/        # HttpClientModule + throwApiError
-│   │   ├── health/      # health do BFF + API
-│   │   └── tasks/       # controller / service (proxy) / dto
-│   └── test/            # integração + e2e (nock)
+│   │   ├── bootstrap/
+│   │   ├── health/
+│   │   ├── metrics/
+│   │   ├── observability/
+│   │   ├── http/
+│   │   └── tasks/
+│   ├── sonar-project.properties
+│   └── test/
 ├── front/               # Frontend (reservado)
+├── observability/       # SonarQube + Prometheus + Grafana + Alertmanager
+├── docs/                # Fonte do MkDocs (GitHub Pages)
+├── .github/workflows/   # CI na raiz (paths por pacote)
+├── mkdocs.yml
 └── README.md
 ```
 
@@ -138,6 +150,8 @@ task-manager/
 | **Jest** + **Supertest** | Testes | Unitários, integração e e2e HTTP |
 | **ESLint** + **Prettier** | Qualidade/estilo | Padroniza o código e evita discussões de formatação |
 | **TypeScript ESLint** | Lint tipado | Regras modernas para TS/Nest |
+| **@willsoto/nestjs-prometheus** + **prom-client** | Métricas | Endpoint `/api/metrics` para Prometheus |
+| **@sentry/nestjs** | Erros / APM leve | Opcional via `SENTRY_DSN`; captura 5xx no filter |
 
 ### Específicas da API (`api/`)
 
@@ -197,13 +211,27 @@ Status no banco como **enum** para garantir valores válidos. No front, os rótu
 
 - Node.js 20+
 - npm
+- Docker Desktop (para a stack de observabilidade)
 - PostgreSQL com banco `task_manager`
 
-### 1) API (porta `3001`)
+### Atalho (raiz do monorepo)
+
+Com `.env` da API/BFF prontos (veja abaixo):
+
+```bash
+npm install
+npm run prisma:generate --prefix api
+npm run prisma:migrate --prefix api
+npm run prisma:seed --prefix api
+npm run start:dev
+```
+
+`start:dev` sobe Sonar/Prometheus/Grafana/Alertmanager e depois API + BFF juntos. Só as apps: `npm run start:apps`. Parar a stack: `npm run obs:down`.
+
+### 1) API (porta `3001`) — setup inicial
 
 ```bash
 cd api
-npm install
 cp .env.example .env
 ```
 
@@ -218,28 +246,19 @@ DATABASE_URL="postgresql://postgres:postgres@localhost:5432/task_manager?schema=
 CORS_ORIGIN=http://localhost:5173
 ```
 
-```bash
-npm run prisma:generate
-npm run prisma:migrate
-npm run prisma:seed
-npm run start:dev
-```
-
 | Recurso | URL |
 | ------- | --- |
 | API | [http://localhost:3001/api](http://localhost:3001/api) |
 | Swagger | [http://localhost:3001/api/docs](http://localhost:3001/api/docs) |
 | Health | [http://localhost:3001/api/health](http://localhost:3001/api/health) |
+| Metrics | [http://localhost:3001/api/metrics](http://localhost:3001/api/metrics) |
 
 > Em `NODE_ENV=production`, o Swagger fica desligado por padrão.
 
-### 2) BFF (porta `3002`)
-
-Com a API já rodando:
+### 2) BFF (porta `3002`) — setup inicial
 
 ```bash
 cd bff
-npm install
 cp .env.example .env
 ```
 
@@ -251,17 +270,14 @@ FRONTEND_ORIGIN=http://localhost:5173
 HTTP_TIMEOUT=5000
 ```
 
-```bash
-npm run start:dev
-```
-
 | Recurso | URL |
 | ------- | --- |
 | BFF | [http://localhost:3002/api](http://localhost:3002/api) |
 | Swagger | [http://localhost:3002/api/docs](http://localhost:3002/api/docs) |
 | Health | [http://localhost:3002/api/health](http://localhost:3002/api/health) |
+| Metrics | [http://localhost:3002/api/metrics](http://localhost:3002/api/metrics) |
 
-> Em `NODE_ENV=production`, o Swagger do BFF também fica desligado por padrão.
+> Em `NODE_ENV=production`, o Swagger do BFF também fica desligado por padrão. Só o BFF: `npm run start:dev` dentro de `bff/`, ou `npm run start:apps` na raiz.
 
 ### 3) Frontend
 
@@ -282,6 +298,7 @@ Pasta `front/` ainda sem código. Quando existir, a expectativa é consumir o **
 | `PATCH` | `/api/tasks/:id` | Atualizar |
 | `DELETE` | `/api/tasks/:id` | Remover |
 | `GET` | `/api/health` | Saúde da app + banco (`ok` / `degraded`) |
+| `GET` | `/api/metrics` | Métricas Prometheus |
 
 ### BFF (`:3002`)
 
@@ -296,6 +313,34 @@ próprio. Detalhes em [bff/README.md](./bff/README.md).
 | `PATCH` | `/api/tasks/:id` | Atualizar (proxy → API) |
 | `DELETE` | `/api/tasks/:id` | Remover (proxy → API) |
 | `GET` | `/api/health` | BFF + API (`ok` / `degraded`) |
+| `GET` | `/api/metrics` | Métricas Prometheus |
+
+---
+
+## Observabilidade
+
+Stack gratuita na pasta [`observability/`](./observability/). Na raiz:
+
+```bash
+npm run start:dev   # obs + API + BFF
+# ou
+npm run obs:up      # só a stack Docker
+```
+
+| Serviço | Porta | Papel |
+| ------- | ----- | ----- |
+| SonarQube Community | `9000` | Análise estática + quality gate |
+| Prometheus | `9090` | Scrapes de `/api/metrics` |
+| Grafana | `3000` | Dashboards (`admin` / `admin`) |
+| Alertmanager | `9093` | Alarmes (webhook Slack/Discord) |
+| Sentry (SaaS) | — | Erros 5xx / traces (via `SENTRY_DSN` no `.env`) |
+
+**Sentry:** cole o DSN em `api/.env` e `bff/.env` (`SENTRY_DSN`).  
+**Sonar:** cole o token no `.env` da raiz (`SONAR_TOKEN`) e rode `npm run sonar:all`.
+
+Secrets do GitHub para o job Sonar nos validates: `SONAR_HOST_URL`, `SONAR_TOKEN` (opcional — sem eles o job é skipped).
+
+Guia completo: [docs/observabilidade.md](./docs/observabilidade.md) (também no site MkDocs).
 
 ---
 
@@ -388,12 +433,53 @@ baseURL configuráveis.
 Um lugar para ver o sistema inteiro (front → bff → api → db), com pacotes
 independentes e deploys separados se necessário.
 
+### Por que Prometheus + Grafana + Sentry + Sonar Community?
+
+- Métricas e alarmes open source, sem vendor lock de APM pago
+- Sentry free tier para erros reais em runtime
+- SonarQube Community self-hosted para quality gate no CI (sem SonarCloud)
+
 ---
 
-## Documentação por pacote
+## CI/CD e GitHub Pages
 
-- API detalhada (endpoints, Prisma, erros): [api/README.md](./api/README.md)
-- BFF (padrões, stack, testes): [bff/README.md](./bff/README.md)
+Workflows **só na raiz** (`.github/workflows/`). Filtro `paths` por pacote:
+
+| Workflow | Quando roda |
+| -------- | ----------- |
+| `api-validate` (+ Sonar) | mudanças em `api/` |
+| `bff-validate` (+ Sonar) | mudanças em `bff/` |
+| `api-deploy-*` / `bff-deploy-*` | develop / release / main |
+| `docs.yml` | mudanças em `docs/`, `mkdocs.yml`, etc. |
+
+O workflow de Docs usa actions com runtime **Node.js 24** (`checkout@v5`, `setup-python@v6`, `git-auto-commit-action@v7`, `upload-pages-artifact@v5`, `deploy-pages@v5`).
+
+### GitHub Pages (MkDocs)
+
+1. **Settings → Pages → Source:** GitHub Actions
+2. Push/merge em `main`
+3. Site: [thataspinola.github.io/task-manager](https://thataspinola.github.io/task-manager/)
+
+Fonte: [`docs/`](./docs/) · config: [`mkdocs.yml`](./mkdocs.yml)
+
+Pré-visualizar localmente:
+
+```bash
+pip install -r requirements-docs.txt
+python -m mkdocs serve
+```
+
+Detalhes de pipelines: [docs/ci-cd.md](./docs/ci-cd.md).
+
+---
+
+## Documentação
+
+- Site (Pages): [thataspinola.github.io/task-manager](https://thataspinola.github.io/task-manager/)
+- API: [api/README.md](./api/README.md)
+- BFF: [bff/README.md](./bff/README.md)
+- Observabilidade: [docs/observabilidade.md](./docs/observabilidade.md)
+- CI/CD: [docs/ci-cd.md](./docs/ci-cd.md)
 
 ---
 
