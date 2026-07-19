@@ -52,12 +52,21 @@ jobs:
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
         run: |
           set -euo pipefail
-          if [ -n "${SONAR_TOKEN}" ] && [ -n "${SONAR_HOST_URL}" ]; then
-            echo "sonar_enabled=true" >> "$GITHUB_OUTPUT"
-          else
+          if [ -z "${SONAR_TOKEN}" ] || [ -z "${SONAR_HOST_URL}" ]; then
             echo "sonar_enabled=false" >> "$GITHUB_OUTPUT"
             echo "::notice::SONAR_HOST_URL/SONAR_TOKEN ausentes — job Sonar será ignorado."
+            exit 0
           fi
+          # Runners do GitHub não alcançam Sonar na máquina local (Docker).
+          case "${SONAR_HOST_URL}" in
+            *localhost*|*127.0.0.1*|*\[::1\]*|*0.0.0.0*)
+              echo "sonar_enabled=false" >> "$GITHUB_OUTPUT"
+              echo "::notice::SONAR_HOST_URL aponta para localhost — job Sonar será ignorado no CI."
+              ;;
+            *)
+              echo "sonar_enabled=true" >> "$GITHUB_OUTPUT"
+              ;;
+          esac
 
   lint:
     name: "2/6 - Lint"

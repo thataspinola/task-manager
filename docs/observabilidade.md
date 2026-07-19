@@ -93,7 +93,7 @@ Os scripts leem `SONAR_TOKEN` e `SONAR_HOST_URL` do `.env` da raiz.
 
 ## SonarQube no CI
 
-1. Sonar acessível pelos runners do GitHub (VPS/túnel — `localhost` da sua máquina não serve)
-2. Secrets: `SONAR_HOST_URL`, `SONAR_TOKEN`
+1. Sonar acessível pelos runners do GitHub (VPS/túnel — **não** use `localhost`)
+2. Secrets: `SONAR_HOST_URL` (ex. `https://sonar.seudominio.com`), `SONAR_TOKEN`
 
-Sem os secrets, o job Sonar é **skipped** e o restante do pipeline segue.
+Sem secrets, ou se `SONAR_HOST_URL` for `localhost`/`127.0.0.1`, o job Sonar é **skipped** e o restante do pipeline segue. Porta correta do Sonar local é `9000` (não `9090`, que é Prometheus).
