@@ -46,6 +46,7 @@ jobs:
       - name: Decide if workflow should continue
         id: prepare
         shell: bash
+        working-directory: .
         env:
           DISPATCH_RELEASE: ${{ github.event_name == 'workflow_dispatch' && inputs.release_branch || '' }}
           DISPATCH_SHA: ${{ github.event_name == 'workflow_dispatch' && inputs.target_sha || '' }}
@@ -285,3 +286,4 @@ jobs:
     if: ${{ needs.prepare.outputs.should_run == 'true' }}
     steps:
       - run: echo "Fluxo HOM concluído."
+        working-directory: .

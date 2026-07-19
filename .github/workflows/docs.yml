@@ -31,13 +31,13 @@ jobs:
       should_deploy: ${{ steps.meta.outputs.should_deploy }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: pip
@@ -52,7 +52,7 @@ jobs:
         run: python scripts/generate_push_log.py
 
       - name: Commitar histórico (quando houver mudanças)
-        uses: stefanzweifel/git-auto-commit-action@v5
+        uses: stefanzweifel/git-auto-commit-action@v7
         with:
           commit_message: "docs: registrar push no histórico MkDocs [skip ci]"
           file_pattern: docs/historico/**
@@ -64,7 +64,7 @@ jobs:
 
       - name: Upload artifact (Pages)
         if: github.ref == 'refs/heads/main'
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v5
         with:
           path: site
 
@@ -88,4 +88,4 @@ jobs:
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5

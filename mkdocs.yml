@@ -77,6 +77,7 @@ nav:
   - Frontend: front/index.md
   - Testes: testes.md
   - CI/CD: ci-cd.md
+  - Observabilidade: observabilidade.md
   - Decisões técnicas: decisoes.md
   - Histórico de pushes: historico/index.md
 

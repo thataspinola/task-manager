@@ -12,6 +12,7 @@ Espelha as operações de tasks via HTTP client (`API_BASE_URL`).
 | `PATCH` | `/tasks/:id` | Atualizar (proxy → API) |
 | `DELETE` | `/tasks/:id` | Remover (proxy → API) |
 | `GET` | `/health` | BFF + API (`ok` / `degraded`) |
+| `GET` | `/metrics` | Métricas Prometheus |
 
 ## Health
 

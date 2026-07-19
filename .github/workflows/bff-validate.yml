@@ -6,8 +6,8 @@ on:
       - "feature/**"
       - "fix/**"
     paths:
-      - 'bff/**'
-      - '.github/workflows/bff-*.yml'
+      - "bff/**"
+      - ".github/workflows/bff-*.yml"
 
 permissions:
   contents: read
@@ -17,21 +17,22 @@ concurrency:
   group: bff-validate-${{ github.ref_name }}
   cancel-in-progress: true
 
-
 defaults:
   run:
     working-directory: bff
 
 jobs:
   prepare:
-    name: "1/5 - Prepare"
+    name: "1/6 - Prepare"
     runs-on: ubuntu-latest
     outputs:
       should_run: ${{ steps.prepare.outputs.should_run }}
+      sonar_enabled: ${{ steps.sonar_cfg.outputs.sonar_enabled }}
     steps:
       - name: Decide if workflow should continue
         id: prepare
         shell: bash
+        working-directory: .
         run: |
           set -euo pipefail
           case "${{ github.ref_name}}" in
@@ -39,11 +40,27 @@ jobs:
             *) echo "should_run=false" >> $GITHUB_OUTPUT;;
           esac
 
+      - name: Check Sonar secrets
+        id: sonar_cfg
+        shell: bash
+        working-directory: .
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        run: |
+          set -euo pipefail
+          if [ -n "${SONAR_TOKEN}" ] && [ -n "${SONAR_HOST_URL}" ]; then
+            echo "sonar_enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "sonar_enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::SONAR_HOST_URL/SONAR_TOKEN ausentes — job Sonar será ignorado."
+          fi
+
   lint:
-    name: "2/5 - Lint"
+    name: "2/6 - Lint"
     runs-on: ubuntu-latest
     needs: prepare
-    if: ${{ needs.prepare.outputs.should_run == 'true' }}
+    if: needs.prepare.outputs.should_run == 'true'
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v6
@@ -56,10 +73,10 @@ jobs:
       - run: npm run format:check
 
   build:
-    name: "3/5 - Build"
+    name: "3/6 - Build"
     runs-on: ubuntu-latest
     needs: [prepare, lint]
-    if: ${{ needs.prepare.outputs.should_run == 'true' }}
+    if: needs.prepare.outputs.should_run == 'true'
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v6
@@ -71,10 +88,10 @@ jobs:
       - run: npm run build
 
   test:
-    name: "4/5 - Test"
+    name: "4/6 - Test"
     runs-on: ubuntu-latest
     needs: [prepare, lint, build]
-    if: ${{ needs.prepare.outputs.should_run == 'true' }}
+    if: needs.prepare.outputs.should_run == 'true'
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v6
@@ -88,11 +105,35 @@ jobs:
       - name: Testes e2e
         run: npm run test:e2e
 
-  create-dev-pr:
-    name: "5/5 - Create or update PR to develop"
+  sonar:
+    name: "5/6 - SonarQube"
     runs-on: ubuntu-latest
-    needs: [prepare, lint, build, test]
-    if: ${{ needs.prepare.outputs.should_run == 'true' }}
+    needs: [prepare, test]
+    if: needs.prepare.outputs.should_run == 'true' && needs.prepare.outputs.sonar_enabled == 'true'
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: bff/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - run: npm run test:unit
+      - name: SonarQube Scan
+        uses: SonarSource/sonarqube-scan-action@v5
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        with:
+          projectBaseDir: bff
+
+  create-dev-pr:
+    name: "6/6 - Create or update PR to develop"
+    runs-on: ubuntu-latest
+    needs: [prepare, lint, build, test, sonar]
+    if: always() && needs.prepare.outputs.should_run == 'true' && needs.lint.result == 'success' && needs.build.result == 'success' && needs.test.result == 'success' && (needs.sonar.result == 'success' || needs.sonar.result == 'skipped')
     env:
       GH_TOKEN: ${{ secrets.AUTOMATION_TOKEN || github.token }}
     steps:

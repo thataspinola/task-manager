@@ -32,11 +32,19 @@ Exemplos:
 
 Workflow: `.github/workflows/docs.yml`
 
+A cada push relevante (paths de docs):
+
 1. Gera log do push em `docs/historico/entries/`
 2. Atualiza `docs/historico/index.md`
 3. Commit automático com `[skip ci]`
-4. Build MkDocs
-5. Em **`main`**, publica no GitHub Pages
+4. Build MkDocs (`mkdocs build --strict`)
+5. Em **`main`**, publica no **GitHub Pages**
+
+### Conteúdo do site
+
+- Arquitetura, setup, API, BFF, testes
+- [CI/CD](ci-cd.md) e [Observabilidade](observabilidade.md)
+- Histórico automático de pushes
 
 ### Ativar GitHub Pages (uma vez)
 
@@ -45,6 +53,15 @@ Workflow: `.github/workflows/docs.yml`
 3. Push/merge em `main`
 
 URL: `https://thataspinola.github.io/task-manager/`
+
+Pré-visualizar localmente:
+
+```bash
+pip install -r requirements-docs.txt
+python -m mkdocs serve
+```
+
+Actions do workflow de Docs atualizadas para runtime **Node.js 24** (`checkout@v5`, `setup-python@v6`, `git-auto-commit-action@v7`, Pages `@v5`).
 
 ## API e BFF (raiz)
 
@@ -56,6 +73,15 @@ URL: `https://thataspinola.github.io/task-manager/`
 | `api-deploy-prod` / `bff-deploy-prod` | Push em `main` |
 
 Os jobs usam `working-directory: api` ou `bff` para `npm ci` / lint / test.
+
+### SonarQube (validate)
+
+Após os testes, `api-validate` / `bff-validate` rodam scan no SonarQube Community se existirem os secrets:
+
+- `SONAR_HOST_URL`
+- `SONAR_TOKEN`
+
+Sem secrets, o job Sonar é skipped. Detalhes em [Observabilidade](observabilidade.md).
 
 ## Histórico automático
 

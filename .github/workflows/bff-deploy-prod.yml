@@ -38,6 +38,7 @@ jobs:
       - name: Decide if workflow should continue
         id: prepare
         shell: bash
+        working-directory: .
         run: |
           set -euo pipefail
 
@@ -214,3 +215,4 @@ jobs:
     if: ${{ needs.prepare.outputs.should_run == 'true' }}
     steps:
       - run: echo "Fluxo PROD concluído."
+        working-directory: .

@@ -36,6 +36,7 @@ jobs:
       - name: Decide if workflow should continue
         id: prepare
         shell: bash
+        working-directory: .
         run: |
           set -euo pipefail
           PR_MERGED="${{ github.event.pull_request.merged }}"
@@ -326,3 +327,4 @@ jobs:
     if: ${{ needs.prepare.outputs.should_run == 'true' }}
     steps:
       - run: echo "Fluxo DEV concluído."
+        working-directory: .

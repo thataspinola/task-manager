@@ -1,4 +1,5 @@
 .vscode
+node_modules/
 .env
 .env.local
 .env.development.local
@@ -15,3 +16,6 @@
 # MkDocs
 site/
 .cache/
+
+# Coverage
+**/coverage/

@@ -12,6 +12,7 @@ import {
 } from '@nestjs/common'
 import type { Request, Response } from 'express'
 import { Prisma } from '../../generated/prisma/client.js'
+import { captureServerException } from '../../observability/sentry.js'
 
 type NestExceptionResponse = {
   message?: string | string[]
@@ -46,6 +47,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
         `${request.method} ${request.originalUrl}`,
         exception instanceof Error ? exception.stack : String(exception),
       )
+      captureServerException(exception)
     }
 
     response.status(body.statusCode).json(body)

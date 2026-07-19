@@ -1,5 +1,7 @@
 /// <reference types="jest" />
 
+jest.mock('./instrument.js', () => ({}));
+
 jest.mock('./bootstrap/create-app.js', () => ({
   bootstrap: jest.fn().mockResolvedValue(undefined),
 }));

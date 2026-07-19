@@ -12,28 +12,37 @@ O frontend **não** fala com a API diretamente. O BFF adapta contratos, agrega c
 
 | Pacote | Status |
 | ------ | ------ |
-| [API](api/index.md) | Pronto: CRUD, paginação, filtros, health, Swagger, testes |
-| [BFF](bff/index.md) | Pronto: proxy HTTP de tasks + health + Swagger + testes |
-| [Frontend](front/index.md) | Pasta reservada (Vite/React previsto na porta `5173`) |
+| [API](api/index.md) | CRUD, health, metrics, Swagger, Sentry opcional, testes |
+| [BFF](bff/index.md) | Proxy HTTP, health, metrics, Swagger, Sentry opcional, testes |
+| [Frontend](front/index.md) | Pasta reservada (Vite/React na porta `5173`) |
+| Observabilidade | SonarQube Community + Prometheus + Grafana + Alertmanager |
 
 ## Navegação rápida
 
 | Seção | Conteúdo |
 | ----- | -------- |
-| [Arquitetura](arquitetura.md) | Fluxos, responsabilidades e diagramas |
-| [Começar](comecar.md) | Como subir API, BFF e banco localmente |
+| [Arquitetura](arquitetura.md) | Fluxos e responsabilidades |
+| [Começar](comecar.md) | Subir API, BFF, banco e stack de obs |
 | [Testes](testes.md) | Unitários, integração e e2e |
-| [CI/CD](ci-cd.md) | Workflows de validação e documentação |
-| [Histórico de pushes](historico/index.md) | Log automático de cada push no GitHub |
+| [CI/CD](ci-cd.md) | Workflows, Sonar e GitHub Pages |
+| [Observabilidade](observabilidade.md) | Métricas, alarmes, Sentry, Sonar |
+| [Histórico de pushes](historico/index.md) | Log automático de cada push |
 
 ## Portas locais
 
-| Serviço | Porta | Base |
-| ------- | ----- | ---- |
-| API | `3001` | `/api` |
-| BFF | `3002` | `/api` |
+| Serviço | Porta | Base / UI |
+| ------- | ----- | --------- |
+| API | `3001` | `/api` · metrics `/api/metrics` |
+| BFF | `3002` | `/api` · metrics `/api/metrics` |
 | Frontend (previsto) | `5173` | — |
+| SonarQube | `9000` | UI |
+| Prometheus | `9090` | UI |
+| Grafana | `3000` | UI (`admin` / `admin`) |
+| Alertmanager | `9093` | UI |
 
 !!! tip "Swagger"
     Em desenvolvimento, a documentação OpenAPI fica em `/api/docs` na API e no BFF.
     Em `NODE_ENV=production`, o Swagger fica desligado por padrão.
+
+!!! info "Este site"
+    Publicado via GitHub Pages a partir da pasta `docs/` (workflow `docs.yml` em `main`).

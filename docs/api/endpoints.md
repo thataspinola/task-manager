@@ -10,6 +10,7 @@ Base: `http://localhost:3001/api`
 | `PATCH` | `/tasks/:id` | Atualizar |
 | `DELETE` | `/tasks/:id` | Remover |
 | `GET` | `/health` | Saúde da app + banco (`ok` / `degraded`) |
+| `GET` | `/metrics` | Métricas Prometheus |
 
 ## Query params da listagem
 

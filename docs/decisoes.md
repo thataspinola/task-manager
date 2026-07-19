@@ -32,3 +32,9 @@ independentes e pipelines separados.
 
 Documentação versionada junto com o código, tema Material legível, e histórico
 de pushes gerado automaticamente no CI.
+
+## Por que Prometheus + Grafana + Sentry + Sonar Community?
+
+- Métricas e alarmes open source (sem APM pago)
+- Sentry free tier para erros reais em runtime
+- SonarQube Community self-hosted para quality gate no CI

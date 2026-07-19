@@ -29,6 +29,8 @@ do frontend, encaminha HTTP tipado à API e traduz erros para um contrato estáv
 | Joi | Validação de env |
 | class-validator | DTOs |
 | nock | Mock HTTP nos testes |
+| Prometheus (`nestjs-prometheus`) | `/api/metrics` |
+| Sentry | Erros 5xx (opcional via `SENTRY_DSN`) |
 
 ## Estrutura
 
@@ -39,8 +41,11 @@ bff/
 │   ├── common/filters/
 │   ├── config/
 │   ├── health/
-│   ├── http/          # HttpClientModule + throwApiError
-│   └── tasks/         # controller / service (proxy) / dto
+│   ├── metrics/
+│   ├── observability/
+│   ├── http/
+│   └── tasks/
+├── sonar-project.properties
 └── test/
 ```
 

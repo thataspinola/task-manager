@@ -24,6 +24,8 @@
 | Persistência (Prisma/Postgres) | não | sim |
 | Proxy HTTP tipado | sim | não |
 | Traduzir erros da API para o front | sim | — |
+| Métricas Prometheus `/api/metrics` | sim | sim |
+| Sentry (erros 5xx) | sim (opcional) | sim (opcional) |
 
 ## Fluxo interno da API
 
@@ -53,27 +55,18 @@ Controller (HTTP)
 ```text
 task-manager/
 ├── api/                 # API de domínio (NestJS + Prisma)
-│   ├── prisma/          # schema, migrations, seed
-│   ├── src/
-│   │   ├── bootstrap/   # create-app (CORS, pipes, filter, Swagger)
-│   │   ├── common/      # Prisma + exception filter
-│   │   ├── config/      # validação de env (Joi)
-│   │   ├── health/
-│   │   ├── tasks/       # controller / service / repository / dto
-│   │   └── generated/   # Prisma Client gerado
-│   └── test/            # integração + e2e
-├── bff/                 # Backend for Frontend (NestJS + Axios)
-│   ├── src/
-│   │   ├── bootstrap/   # create-app
-│   │   ├── common/      # exception filter
-│   │   ├── config/      # validação de env (Joi)
-│   │   ├── http/        # HttpClientModule + throwApiError
-│   │   ├── health/
-│   │   └── tasks/       # controller / service (proxy) / dto
-│   └── test/
+│   ├── src/metrics/     # Prometheus
+│   ├── src/observability/
+│   └── sonar-project.properties
+├── bff/                 # Backend for Frontend
+│   ├── src/metrics/
+│   ├── src/observability/
+│   └── sonar-project.properties
 ├── front/               # Frontend (reservado)
-├── docs/                # Documentação MkDocs
-└── .github/workflows/   # Docs + Pages
+├── observability/       # Sonar + Prometheus + Grafana + Alertmanager
+├── docs/                # MkDocs → GitHub Pages
+├── .github/workflows/   # CI na raiz (paths por pacote)
+└── mkdocs.yml
 ```
 
 ## Modelo de domínio

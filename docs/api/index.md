@@ -19,6 +19,8 @@ O frontend **não** deve acessar esta API diretamente — use o [BFF](../bff/ind
 | class-validator | Validação de DTOs |
 | Swagger | OpenAPI em `/api/docs` |
 | Jest + SWC | Testes |
+| Prometheus (`nestjs-prometheus`) | `/api/metrics` |
+| Sentry | Erros 5xx (opcional via `SENTRY_DSN`) |
 
 ## Funcionalidades
 
@@ -26,9 +28,11 @@ O frontend **não** deve acessar esta API diretamente — use o [BFF](../bff/ind
 - Filtro por status e busca por título/descrição
 - Paginação
 - Health check (app + banco: `ok` / `degraded`)
-- Tratamento global de erros
+- Métricas Prometheus
+- Tratamento global de erros (+ Sentry opcional)
 - Seed do banco
 - Cobertura unitária 100% + integração + e2e
+- Scan SonarQube no CI (`sonar-project.properties`)
 
 ## Estrutura
 
@@ -40,8 +44,11 @@ api/
 │   ├── common/      # Prisma + AllExceptionsFilter
 │   ├── config/      # env Joi
 │   ├── health/
-│   ├── tasks/       # controller / service / repository / dto
-│   └── generated/   # Prisma Client
+│   ├── metrics/     # Prometheus
+│   ├── observability/  # Sentry
+│   ├── tasks/
+│   └── generated/
+├── sonar-project.properties
 └── test/
 ```
 

@@ -7,6 +7,7 @@ import { Controller, Get, HttpStatus, Res } from '@nestjs/common';
 import { ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Response } from 'express';
 import { firstValueFrom } from 'rxjs';
+import { HealthMetricsService } from '../metrics/health-metrics.service.js';
 
 export type HealthResponse = {
   status: 'ok' | 'degraded';
@@ -17,7 +18,10 @@ export type HealthResponse = {
 @ApiTags('Health')
 @Controller('health')
 export class HealthController {
-  constructor(private readonly httpService: HttpService) {}
+  constructor(
+    private readonly httpService: HttpService,
+    private readonly healthMetrics: HealthMetricsService,
+  ) {}
 
   @Get()
   @ApiOperation({
@@ -39,6 +43,8 @@ export class HealthController {
 
     try {
       await firstValueFrom(this.httpService.get('/health'));
+      this.healthMetrics.setComponentHealth('api', true);
+      this.healthMetrics.setComponentHealth('app', true);
 
       return {
         status: 'ok',
@@ -46,6 +52,8 @@ export class HealthController {
         timestamp,
       };
     } catch {
+      this.healthMetrics.setComponentHealth('api', false);
+      this.healthMetrics.setComponentHealth('app', false);
       res.status(HttpStatus.SERVICE_UNAVAILABLE);
 
       return {
