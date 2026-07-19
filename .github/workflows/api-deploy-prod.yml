@@ -1,20 +1,27 @@
-name: Deploy to Prod
+name: API - Deploy Prod
 
 on:
   push:
     branches:
       - main
+    paths:
+      - 'api/**'
+      - '.github/workflows/api-*.yml'
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: deploy-prod-${{ github.ref_name }}
+  group: api-deploy-prod-${{ github.ref_name }}
   cancel-in-progress: true
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+defaults:
+  run:
+    working-directory: api
 
 jobs:
   prepare:
@@ -66,6 +73,7 @@ jobs:
         with:
           node-version: 22
       - name: Definir versão como a mais recente entre os pais do merge
+        working-directory: .
         run: |
           node <<'NODE'
           const { execSync } = require('child_process');
@@ -73,7 +81,7 @@ jobs:
 
           function readVer(ref) {
             try {
-              const raw = execSync(`git show ${ref}:package.json`, { encoding: 'utf8', maxBuffer: 10 * 1024 * 1024 });
+              const raw = execSync(`git show ${ref}:api/package.json`, { encoding: 'utf8', maxBuffer: 10 * 1024 * 1024 });
               const v = JSON.parse(raw).version;
               return typeof v === 'string' && v ? v : null;
             } catch {
@@ -112,7 +120,7 @@ jobs:
           }
 
           const fromParents = cmp(v1, v2) >= 0 ? v1 : v2;
-          const cur = JSON.parse(fs.readFileSync('package.json', 'utf8')).version;
+          const cur = JSON.parse(fs.readFileSync('api/package.json', 'utf8')).version;
           // Mais recente = máximo entre as duas linhas do merge e o que já está em HEAD (evita downgrade).
           const target = cmp(cur, fromParents) > 0 ? cur : fromParents;
 
@@ -122,14 +130,14 @@ jobs:
           }
 
           console.log(`Alinhar versão: HEAD=${cur}, pais ${v1} e ${v2} → ${target}.`);
-          execSync(`npm version ${target} --no-git-tag-version`, { stdio: 'inherit' });
+          execSync(`npm version ${target} --no-git-tag-version --prefix api`, { stdio: 'inherit' });
           NODE
       - uses: actions/upload-artifact@v7
         with:
           name: package-metadata-prod
           path: |
-            package.json
-            package-lock.json
+            api/package.json
+            api/package-lock.json
           if-no-files-found: error
 
   lint:
@@ -145,11 +153,12 @@ jobs:
       - uses: actions/download-artifact@v8
         with:
           name: package-metadata-prod
-          path: .
+          path: api
       - uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: npm
+          cache-dependency-path: api/package-lock.json
       - run: npm ci --no-audit --no-fund
       - run: npm run lint
       - run: npm run format:check
@@ -167,11 +176,12 @@ jobs:
       - uses: actions/download-artifact@v8
         with:
           name: package-metadata-prod
-          path: .
+          path: api
       - uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: npm
+          cache-dependency-path: api/package-lock.json
       - run: npm ci --no-audit --no-fund
       - run: npm run build
 
@@ -187,11 +197,12 @@ jobs:
       - uses: actions/download-artifact@v8
         with:
           name: package-metadata-prod
-          path: .
+          path: api
       - uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: npm
+          cache-dependency-path: api/package-lock.json
       - run: npm ci --no-audit --no-fund
       - name: Test
         run: npm test

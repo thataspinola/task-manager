@@ -395,6 +395,30 @@ independentes e deploys separados se necessário.
 - API detalhada (endpoints, Prisma, erros): [api/README.md](./api/README.md)
 - BFF (padrões, stack, testes): [bff/README.md](./bff/README.md)
 
+### Documentação MkDocs (GitHub Pages)
+
+Documentação completa do monorepo com Material for MkDocs, publicada via GitHub Pages.
+
+- Site (após ativar Pages em `main`): [thataspinola.github.io/task-manager](https://thataspinola.github.io/task-manager/)
+- Fonte: pasta [`docs/`](./docs/)
+- Config: [`mkdocs.yml`](./mkdocs.yml)
+- Workflows na raiz: [`.github/workflows/`](./.github/workflows/)
+
+Os Actions só disparam quando o push altera o pacote correspondente (`paths`):
+
+| Workflow | Quando roda |
+| -------- | ----------- |
+| `api-*` | mudanças em `api/` |
+| `bff-*` | mudanças em `bff/` |
+| `docs.yml` | mudanças em `docs/` / MkDocs |
+
+Pré-visualizar localmente:
+
+```bash
+pip install -r requirements-docs.txt
+python -m mkdocs serve
+```
+
 ---
 
 ## Licença

@@ -1,4 +1,4 @@
-name: Deploy to develop
+name: API - Deploy develop
 
 on:
   pull_request:
@@ -6,17 +6,24 @@ on:
       - develop
     types:
       - closed
+    paths:
+      - 'api/**'
+      - '.github/workflows/api-*.yml'
 
 permissions:
   contents: write
   pull-requests: write
 
 concurrency:
-  group: deploy-dev-${{ github.event.pull_request.number || github.ref }}
+  group: api-deploy-dev-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+defaults:
+  run:
+    working-directory: api
 
 jobs:
   prepare:
@@ -75,6 +82,7 @@ jobs:
         with:
           node-version: 22
           cache: npm
+          cache-dependency-path: api/package-lock.json
       - run: npm ci --no-audit --no-fund
       - run: npm run lint
       - run: npm run format:check
@@ -93,6 +101,7 @@ jobs:
         with:
           node-version: 22
           cache: npm
+          cache-dependency-path: api/package-lock.json
       - run: npm ci --no-audit --no-fund
       - run: npm run build
 
@@ -109,6 +118,7 @@ jobs:
         with:
           node-version: 22
           cache: npm
+          cache-dependency-path: api/package-lock.json
       - run: npm ci --no-audit --no-fund
       - name: Testes automatizados
         run: npm test
@@ -130,20 +140,22 @@ jobs:
         with:
           node-version: 22
           cache: npm
+          cache-dependency-path: api/package-lock.json
       - name: Configure git
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
       - name: Create or update release and promote branches
         shell: bash
+        working-directory: .
         run: |
           set -euo pipefail
 
           REPO="${{ github.repository }}"
           SOURCE_BRANCH="develop"
           BASELINE_BRANCH="main"
-          HOM_WORKFLOW_PATH=".github/workflows/3 - deploy-hom.yaml"
-          PROD_WORKFLOW_PATH=".github/workflows/4 - deploy-prod.yml"
+          HOM_WORKFLOW_PATH=".github/workflows/api-deploy-hom.yml"
+          PROD_WORKFLOW_PATH=".github/workflows/api-deploy-prod.yml"
 
           git fetch origin --prune
 
@@ -206,7 +218,7 @@ jobs:
           if [ -n "$OPEN_RELEASE_BRANCH" ]; then
             VERSION="${OPEN_RELEASE_BRANCH#release/}"
           else
-            PACKAGE_VERSION="$(node -p "require('./package.json').version")"
+            PACKAGE_VERSION="$(node -p "require('./api/package.json').version")"
             REMOTE_VERSIONS="$(git ls-remote --heads origin 'refs/heads/release/*' 'refs/heads/promote/*' | awk -F'/' '{print $NF}')"
             HIGHEST_VERSION="$PACKAGE_VERSION"
             while IFS= read -r version; do
@@ -226,34 +238,34 @@ jobs:
           fi
 
           if git cat-file -e "origin/${SOURCE_BRANCH}:${HOM_WORKFLOW_PATH}" 2>/dev/null; then
-            git checkout "origin/${SOURCE_BRANCH}" -- "${HOM_WORKFLOW_PATH}"
+            git -C "${{ github.workspace }}" checkout "origin/${SOURCE_BRANCH}" -- "${HOM_WORKFLOW_PATH}"
           fi
 
           if git cat-file -e "origin/${SOURCE_BRANCH}:${PROD_WORKFLOW_PATH}" 2>/dev/null; then
-            git checkout "origin/${SOURCE_BRANCH}" -- "${PROD_WORKFLOW_PATH}"
+            git -C "${{ github.workspace }}" checkout "origin/${SOURCE_BRANCH}" -- "${PROD_WORKFLOW_PATH}"
           fi
 
           ensure_package_version() {
             local target_version="$1"
             local current_version
-            current_version="$(node -p "require('./package.json').version")"
+            current_version="$(node -p "require('./api/package.json').version")"
 
             if [ "$current_version" != "$target_version" ]; then
-              npm version "$target_version" --no-git-tag-version
+              npm version "$target_version" --no-git-tag-version --prefix api
             else
               echo "package.json já está na versão ${target_version}; a atualização será ignorada."
             fi
           }
 
           ensure_package_version "${VERSION}"
-          git add package.json package-lock.json
-          git add "${HOM_WORKFLOW_PATH}" "${PROD_WORKFLOW_PATH}" || true
+          git add api/package.json api/package-lock.json
+          git -C "${{ github.workspace }}" add "${HOM_WORKFLOW_PATH}" "${PROD_WORKFLOW_PATH}" || true
           git commit --allow-empty -m "chore(release): sync ${VERSION} [skip ci]"
           git push -u origin "$RELEASE_BRANCH" --force-with-lease
 
           git checkout -B "$PROMOTE_BRANCH" "origin/$SOURCE_BRANCH"
           ensure_package_version "${VERSION}"
-          git add package.json package-lock.json
+          git add api/package.json api/package-lock.json
           git commit --allow-empty -m "chore(promote): ${VERSION} [skip ci]"
           git push -u origin "$PROMOTE_BRANCH" --force-with-lease
 
@@ -282,7 +294,7 @@ jobs:
             git push origin --delete "${PROMOTE_BRANCH}" 2>/dev/null || true
             git checkout -B "${PROMOTE_BRANCH}" "origin/${SOURCE_BRANCH}"
             ensure_package_version "${VERSION}"
-            git add package.json package-lock.json
+            git add api/package.json api/package-lock.json
             git commit --allow-empty -m "chore(promote): ${VERSION} [skip ci]"
             git push -u origin "${PROMOTE_BRANCH}" --force-with-lease
           }

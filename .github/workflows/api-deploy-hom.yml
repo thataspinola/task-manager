@@ -1,9 +1,12 @@
-name: Deploy to Homol
+name: API - Deploy Homol
 
 on:
   push:
     branches:
       - "release/**"
+    paths:
+      - 'api/**'
+      - '.github/workflows/api-*.yml'
   workflow_dispatch:
     inputs:
       release_branch:
@@ -20,11 +23,15 @@ permissions:
   pull-requests: write
 
 concurrency:
-  group: deploy-hom-${{ github.ref_name }}-${{ github.sha }}
+  group: api-deploy-hom-${{ github.ref_name }}-${{ github.sha }}
   cancel-in-progress: true
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+defaults:
+  run:
+    working-directory: api
 
 jobs:
   prepare:
@@ -101,6 +108,7 @@ jobs:
         with:
           node-version: 22
           cache: npm
+          cache-dependency-path: api/package-lock.json
       - run: npm ci --no-audit --no-fund
       - run: npm run lint
       - run: npm run format:check
@@ -119,6 +127,7 @@ jobs:
         with:
           node-version: 22
           cache: npm
+          cache-dependency-path: api/package-lock.json
       - run: npm ci --no-audit --no-fund
       - run: npm run build
 
@@ -135,6 +144,7 @@ jobs:
         with:
           node-version: 22
           cache: npm
+          cache-dependency-path: api/package-lock.json
       - run: npm ci --no-audit --no-fund
       - name: Test
         run: npm test
@@ -153,6 +163,7 @@ jobs:
           token: ${{ secrets.AUTOMATION_TOKEN || github.token }}
       - name: Delete promote branch
         shell: bash
+        working-directory: .
         run: |
           set -euo pipefail
           BRANCH="${{ needs.prepare.outputs.promote_branch }}"
@@ -177,6 +188,7 @@ jobs:
         with:
           node-version: 22
           cache: npm
+          cache-dependency-path: api/package-lock.json
 
       - run: npm ci --no-audit --no-fund
 
@@ -187,6 +199,7 @@ jobs:
 
       - name: Merge main into release and align npm version
         shell: bash
+        working-directory: .
         env:
           RELEASE_BRANCH: ${{ needs.prepare.outputs.release_branch }}
         run: |
@@ -210,9 +223,9 @@ jobs:
               echo "Ficheiros em conflito: ${UNRESOLVED}"
               for f in $UNRESOLVED; do
                 case "$f" in
-                  package.json|package-lock.json) ;;
+                  api/package.json|api/package-lock.json) ;;
                   *)
-                    echo "::error::Conflito em '${f}' — só package.json / package-lock.json são resolvidos automaticamente."
+                    echo "::error::Conflito em '${f}' — só api/package.json / package-lock.json são resolvidos automaticamente."
                     git merge --abort || true
                     exit 1
                     ;;
@@ -233,6 +246,7 @@ jobs:
 
       - name: Create or update PR
         shell: bash
+        working-directory: .
         env:
           GH_TOKEN: ${{ secrets.AUTOMATION_TOKEN || github.token }}
         run: |

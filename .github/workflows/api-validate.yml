@@ -1,21 +1,28 @@
-name: Validate Shell
+name: API - Validate
 
 on:
   push:
     branches:
       - "feature/**"
       - "fix/**"
+    paths:
+      - 'api/**'
+      - '.github/workflows/api-*.yml'
 
 permissions:
   contents: read
   pull-requests: write
 
 concurrency:
-  group: validate-${{ github.ref_name }}
+  group: api-validate-${{ github.ref_name }}
   cancel-in-progress: true
 
 env:
   DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/ci?schema=public
+
+defaults:
+  run:
+    working-directory: api
 
 jobs:
   prepare:
@@ -45,6 +52,7 @@ jobs:
         with:
           node-version: 22
           cache: npm
+          cache-dependency-path: api/package-lock.json
       - run: npm ci --no-audit --no-fund
       - run: npm run prisma:generate
       - run: npm run lint
@@ -61,6 +69,7 @@ jobs:
         with:
           node-version: 22
           cache: npm
+          cache-dependency-path: api/package-lock.json
       - run: npm ci --no-audit --no-fund
       - run: npm run prisma:generate
       - run: npm run build
@@ -76,6 +85,7 @@ jobs:
         with:
           node-version: 22
           cache: npm
+          cache-dependency-path: api/package-lock.json
       - run: npm ci --no-audit --no-fund
       - run: npm run prisma:generate
       - name: Testes unitários
@@ -98,6 +108,7 @@ jobs:
           token: ${{ secrets.AUTOMATION_TOKEN || github.token }}
       - name: "Create or update PR"
         shell: bash
+        working-directory: .
         run: |
           set -euo pipefail
           REPO="${{ github.repository }}"
