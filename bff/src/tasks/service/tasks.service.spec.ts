@@ -1,12 +1,9 @@
 /// <reference types="jest" />
 
 import { HttpService } from '@nestjs/axios';
-import {
-  BadGatewayException,
-  GatewayTimeoutException,
-} from '@nestjs/common';
+import { BadGatewayException, GatewayTimeoutException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
-import { AxiosError, AxiosHeaders, HttpStatusCode } from 'axios';
+import { AxiosError, AxiosHeaders } from 'axios';
 import { of, throwError } from 'rxjs';
 import { PaginatedTasks, Task, TaskStatus } from '../types/task.type.js';
 import { TasksService } from './tasks.service.js';

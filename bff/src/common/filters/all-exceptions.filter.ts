@@ -45,7 +45,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
     const message = this.resolveMessage(exception, exceptionBody, parsedBody);
     const error = parsedBody?.error ?? this.resolveErrorName(statusCode);
 
-    if (statusCode >= HttpStatus.INTERNAL_SERVER_ERROR) {
+    if (statusCode >= 500) {
       this.logger.error(
         `${request.method} ${request.originalUrl}`,
         exception instanceof Error ? exception.stack : String(exception),
@@ -84,31 +84,20 @@ export class AllExceptionsFilter implements ExceptionFilter {
   }
 
   private resolveErrorName(statusCode: number): string {
-    switch (statusCode) {
-      case HttpStatus.BAD_REQUEST:
-        return 'Bad Request';
-      case HttpStatus.UNAUTHORIZED:
-        return 'Unauthorized';
-      case HttpStatus.FORBIDDEN:
-        return 'Forbidden';
-      case HttpStatus.NOT_FOUND:
-        return 'Not Found';
-      case HttpStatus.CONFLICT:
-        return 'Conflict';
-      case HttpStatus.REQUEST_TIMEOUT:
-        return 'Request Timeout';
-      case HttpStatus.UNPROCESSABLE_ENTITY:
-        return 'Unprocessable Entity';
-      case HttpStatus.INTERNAL_SERVER_ERROR:
-        return 'Internal Server Error';
-      case HttpStatus.BAD_GATEWAY:
-        return 'Bad Gateway';
-      case HttpStatus.SERVICE_UNAVAILABLE:
-        return 'Service Unavailable';
-      case HttpStatus.GATEWAY_TIMEOUT:
-        return 'Gateway Timeout';
-      default:
-        return 'HTTP Error';
-    }
+    const names: Record<number, string> = {
+      [HttpStatus.BAD_REQUEST]: 'Bad Request',
+      [HttpStatus.UNAUTHORIZED]: 'Unauthorized',
+      [HttpStatus.FORBIDDEN]: 'Forbidden',
+      [HttpStatus.NOT_FOUND]: 'Not Found',
+      [HttpStatus.CONFLICT]: 'Conflict',
+      [HttpStatus.REQUEST_TIMEOUT]: 'Request Timeout',
+      [HttpStatus.UNPROCESSABLE_ENTITY]: 'Unprocessable Entity',
+      [HttpStatus.INTERNAL_SERVER_ERROR]: 'Internal Server Error',
+      [HttpStatus.BAD_GATEWAY]: 'Bad Gateway',
+      [HttpStatus.SERVICE_UNAVAILABLE]: 'Service Unavailable',
+      [HttpStatus.GATEWAY_TIMEOUT]: 'Gateway Timeout',
+    };
+
+    return names[statusCode] ?? 'HTTP Error';
   }
 }

@@ -45,7 +45,7 @@ describe('HttpMetricsInterceptor', () => {
     }
   }
 
-  it('skips non-http contexts', (done) => {
+  it('skips non-http contexts', done => {
     const context = {
       getType: () => 'rpc' as const,
     }
@@ -58,7 +58,7 @@ describe('HttpMetricsInterceptor', () => {
       })
   })
 
-  it('records duration on success with route path', (done) => {
+  it('records duration on success with route path', done => {
     const context = httpContext({
       routePath: '/tasks/:id',
       baseUrl: '/api',
@@ -78,7 +78,7 @@ describe('HttpMetricsInterceptor', () => {
       })
   })
 
-  it('uses empty base when baseUrl is undefined', (done) => {
+  it('uses empty base when baseUrl is undefined', done => {
     const context = httpContext({
       routePath: '/health',
       baseUrl: undefined,
@@ -94,7 +94,7 @@ describe('HttpMetricsInterceptor', () => {
       })
   })
 
-  it('falls back to request.path when route is missing', (done) => {
+  it('falls back to request.path when route is missing', done => {
     const context = httpContext({ path: '/api/health', omitRoute: true })
 
     interceptor
@@ -107,7 +107,7 @@ describe('HttpMetricsInterceptor', () => {
       })
   })
 
-  it('uses unknown when path and route are empty', (done) => {
+  it('uses unknown when path and route are empty', done => {
     const context = httpContext({ path: '', routePath: '' })
 
     interceptor
@@ -120,7 +120,7 @@ describe('HttpMetricsInterceptor', () => {
       })
   })
 
-  it('records 500 on handler error when status is not set', (done) => {
+  it('records 500 on handler error when status is not set', done => {
     const context = httpContext({ statusCode: 200, path: '/x' })
 
     interceptor
@@ -135,7 +135,7 @@ describe('HttpMetricsInterceptor', () => {
       })
   })
 
-  it('records existing error status when already >= 400', (done) => {
+  it('records existing error status when already >= 400', done => {
     const context = httpContext({ statusCode: 503, path: '/x' })
 
     interceptor

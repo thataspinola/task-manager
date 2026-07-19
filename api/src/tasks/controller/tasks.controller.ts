@@ -30,7 +30,9 @@ import { ListTasksQueryDto } from '../dto/list-tasks-query.dto.js'
 import { PaginatedTasksResponseDto } from '../dto/paginated-tasks-response.dto.js'
 import { TaskResponseDto } from '../dto/task-response.dto.js'
 import { UpdateTaskDto } from '../dto/update-task.dto.js'
+import type { PaginatedTasks } from '../services/tasks.service.js'
 import { TasksService } from '../services/tasks.service.js'
+import type { Task } from '../../generated/prisma/client.js'
 
 @ApiTags('Tasks')
 @Controller('tasks')
@@ -49,7 +51,7 @@ export class TasksController {
   @ApiBadRequestResponse({
     description: 'Dados enviados são inválidos',
   })
-  create(@Body() input: CreateTaskDto) {
+  create(@Body() input: CreateTaskDto): Promise<Task> {
     return this.tasksService.create(input)
   }
 
@@ -64,7 +66,7 @@ export class TasksController {
   @ApiBadRequestResponse({
     description: 'Filtros ou paginação inválidos',
   })
-  findAll(@Query() query: ListTasksQueryDto) {
+  findAll(@Query() query: ListTasksQueryDto): Promise<PaginatedTasks> {
     return this.tasksService.findAll(query)
   }
 
@@ -87,7 +89,7 @@ export class TasksController {
   @ApiNotFoundResponse({
     description: 'Tarefa não encontrada',
   })
-  findOne(@Param('id', new ParseUUIDPipe()) id: string) {
+  findOne(@Param('id', new ParseUUIDPipe()) id: string): Promise<Task> {
     return this.tasksService.findOne(id)
   }
 
@@ -113,7 +115,7 @@ export class TasksController {
   update(
     @Param('id', new ParseUUIDPipe()) id: string,
     @Body() input: UpdateTaskDto,
-  ) {
+  ): Promise<Task> {
     return this.tasksService.update(id, input)
   }
 
@@ -136,7 +138,7 @@ export class TasksController {
   @ApiNotFoundResponse({
     description: 'Tarefa não encontrada',
   })
-  remove(@Param('id', new ParseUUIDPipe()) id: string) {
+  remove(@Param('id', new ParseUUIDPipe()) id: string): Promise<void> {
     return this.tasksService.remove(id)
   }
 }

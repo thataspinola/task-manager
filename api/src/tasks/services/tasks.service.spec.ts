@@ -92,9 +92,7 @@ describe('TasksService', () => {
     it('returns paginated tasks from the repository', async () => {
       repository.findMany.mockResolvedValue({ items: [task], total: 1 })
 
-      await expect(
-        service.findAll({ page: 1, limit: 10 }),
-      ).resolves.toEqual({
+      await expect(service.findAll({ page: 1, limit: 10 })).resolves.toEqual({
         data: [task],
         meta: { page: 1, limit: 10, total: 1, totalPages: 1 },
       })

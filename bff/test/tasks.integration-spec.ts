@@ -16,10 +16,7 @@ describe('TasksService + HttpClient (integration)', () => {
     process.env.HTTP_TIMEOUT = '2000';
 
     moduleRef = await Test.createTestingModule({
-      imports: [
-        ConfigModule.forRoot({ isGlobal: true }),
-        HttpClientModule,
-      ],
+      imports: [ConfigModule.forRoot({ isGlobal: true }), HttpClientModule],
       providers: [TasksService],
     }).compile();
 

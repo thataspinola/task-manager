@@ -2,6 +2,14 @@
 
 import { envValidationSchema } from './env.validation.js';
 
+type ValidatedEnv = {
+  API_BASE_URL: string;
+  FRONTEND_ORIGIN: string;
+  PORT: number;
+  HTTP_TIMEOUT: number;
+  NODE_ENV: string;
+};
+
 describe('envValidationSchema', () => {
   const validEnv = {
     API_BASE_URL: 'http://localhost:3001/api',
@@ -9,23 +17,25 @@ describe('envValidationSchema', () => {
   };
 
   it('accepts a minimal valid env and applies defaults', () => {
-    const { error, value } = envValidationSchema.validate(validEnv);
+    const result = envValidationSchema.validate(validEnv);
+    const value = result.value as ValidatedEnv;
 
-    expect(error).toBeUndefined();
+    expect(result.error).toBeUndefined();
     expect(value.PORT).toBe(3002);
     expect(value.HTTP_TIMEOUT).toBe(5000);
     expect(value.NODE_ENV).toBe('development');
   });
 
   it('accepts custom PORT and NODE_ENV', () => {
-    const { error, value } = envValidationSchema.validate({
+    const result = envValidationSchema.validate({
       ...validEnv,
       PORT: 4000,
       NODE_ENV: 'test',
       HTTP_TIMEOUT: 1000,
     });
+    const value = result.value as ValidatedEnv;
 
-    expect(error).toBeUndefined();
+    expect(result.error).toBeUndefined();
     expect(value.PORT).toBe(4000);
     expect(value.NODE_ENV).toBe('test');
   });

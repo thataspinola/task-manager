@@ -47,7 +47,8 @@ export class HttpMetricsInterceptor implements NestInterceptor {
   }
 
   private normalizePath(request: Request): string {
-    const routePath = request.route?.path
+    const route = request.route as { path?: string } | undefined
+    const routePath = route?.path
     if (typeof routePath === 'string' && routePath.length > 0) {
       const base = request.baseUrl ?? ''
       return `${base}${routePath}`
