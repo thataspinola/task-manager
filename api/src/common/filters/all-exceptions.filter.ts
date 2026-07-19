@@ -12,6 +12,7 @@ import {
 } from '@nestjs/common'
 import type { Request, Response } from 'express'
 import { Prisma } from '../../generated/prisma/client.js'
+import { captureServerException } from '../../observability/sentry.js'
 
 type NestExceptionResponse = {
   message?: string | string[]
@@ -41,11 +42,12 @@ export class AllExceptionsFilter implements ExceptionFilter {
         ? this.mapPrismaError(exception, request)
         : this.mapHttpError(exception, request)
 
-    if (body.statusCode >= HttpStatus.INTERNAL_SERVER_ERROR) {
+    if (body.statusCode >= 500) {
       this.logger.error(
         `${request.method} ${request.originalUrl}`,
         exception instanceof Error ? exception.stack : String(exception),
       )
+      captureServerException(exception)
     }
 
     response.status(body.statusCode).json(body)
@@ -118,7 +120,11 @@ export class AllExceptionsFilter implements ExceptionFilter {
     return {
       statusCode,
       error: parsedResponse?.error ?? this.resolveErrorName(statusCode),
-      message: this.resolveMessage(exception, exceptionResponse, parsedResponse),
+      message: this.resolveMessage(
+        exception,
+        exceptionResponse,
+        parsedResponse,
+      ),
       path: request.originalUrl,
       method: request.method,
       timestamp: new Date().toISOString(),
@@ -146,25 +152,17 @@ export class AllExceptionsFilter implements ExceptionFilter {
   }
 
   private resolveErrorName(statusCode: number): string {
-    switch (statusCode) {
-      case HttpStatus.BAD_REQUEST:
-        return 'Bad Request'
-      case HttpStatus.UNAUTHORIZED:
-        return 'Unauthorized'
-      case HttpStatus.FORBIDDEN:
-        return 'Forbidden'
-      case HttpStatus.NOT_FOUND:
-        return 'Not Found'
-      case HttpStatus.CONFLICT:
-        return 'Conflict'
-      case HttpStatus.UNPROCESSABLE_ENTITY:
-        return 'Unprocessable Entity'
-      case HttpStatus.SERVICE_UNAVAILABLE:
-        return 'Service Unavailable'
-      case HttpStatus.INTERNAL_SERVER_ERROR:
-        return 'Internal Server Error'
-      default:
-        return 'Http Exception'
+    const names: Record<number, string> = {
+      [HttpStatus.BAD_REQUEST]: 'Bad Request',
+      [HttpStatus.UNAUTHORIZED]: 'Unauthorized',
+      [HttpStatus.FORBIDDEN]: 'Forbidden',
+      [HttpStatus.NOT_FOUND]: 'Not Found',
+      [HttpStatus.CONFLICT]: 'Conflict',
+      [HttpStatus.UNPROCESSABLE_ENTITY]: 'Unprocessable Entity',
+      [HttpStatus.SERVICE_UNAVAILABLE]: 'Service Unavailable',
+      [HttpStatus.INTERNAL_SERVER_ERROR]: 'Internal Server Error',
     }
+
+    return names[statusCode] ?? 'Http Exception'
   }
 }

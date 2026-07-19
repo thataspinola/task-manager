@@ -1,0 +1,33 @@
+{
+  "name": "task-manager",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Monorepo Task Manager — orquestra API, BFF e observabilidade local",
+  "scripts": {
+    "postinstall": "npm install --prefix api && npm install --prefix bff",
+    "obs:up": "docker compose -f observability/docker-compose.yml up -d",
+    "obs:down": "docker compose -f observability/docker-compose.yml down",
+    "obs:logs": "docker compose -f observability/docker-compose.yml logs -f",
+    "obs:ps": "docker compose -f observability/docker-compose.yml ps",
+    "dev:api": "npm run start:dev --prefix api",
+    "dev:bff": "npm run start:dev --prefix bff",
+    "start:dev": "npm run obs:up && concurrently -k -n api,bff -c cyan,magenta \"npm run dev:api\" \"npm run dev:bff\"",
+    "start:apps": "concurrently -k -n api,bff -c cyan,magenta \"npm run dev:api\" \"npm run dev:bff\"",
+    "sonar:api": "dotenv -e .env -- npm run sonar:scan --prefix api",
+    "sonar:bff": "dotenv -e .env -- npm run sonar:scan --prefix bff",
+    "sonar:all": "npm run test:api && npm run sonar:api && npm run test:bff && npm run sonar:bff",
+    "test:api": "npm test --prefix api",
+    "test:bff": "npm test --prefix bff"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1",
+    "dotenv-cli": "^10.0.0"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@sentry/nestjs": "^10.66.0",
+    "@sentry/profiling-node": "^10.66.0"
+  }
+}

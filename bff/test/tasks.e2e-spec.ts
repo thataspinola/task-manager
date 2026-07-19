@@ -6,9 +6,24 @@ import { AppModule } from '../src/app.module.js';
 import { configureApp } from '../src/bootstrap/create-app.js';
 import { TaskStatus } from '../src/tasks/types/task.type.js';
 
+type SuperTestServer = Parameters<typeof request>[0];
+
+type TaskBody = {
+  id: string;
+  title: string;
+  description: string | null;
+  status: TaskStatus;
+};
+
+type PaginatedBody = {
+  data: TaskBody[];
+};
+
 describe('BFF Tasks API (e2e)', () => {
   let app: INestApplication;
   const apiBase = 'http://localhost:3001';
+
+  const server = (): SuperTestServer => app.getHttpServer() as SuperTestServer;
 
   beforeAll(async () => {
     process.env.API_BASE_URL = `${apiBase}/api`;
@@ -28,7 +43,9 @@ describe('BFF Tasks API (e2e)', () => {
   });
 
   afterAll(async () => {
-    await app.close();
+    if (app) {
+      await app.close();
+    }
     nock.restore();
   });
 
@@ -57,7 +74,7 @@ describe('BFF Tasks API (e2e)', () => {
       .reply(200, { ...task, status: TaskStatus.COMPLETED });
     nock(apiBase).delete(`/api/tasks/${taskId}`).reply(204);
 
-    const created = await request(app.getHttpServer())
+    const created = await request(server())
       .post('/api/tasks')
       .send({
         title: 'Write tests',
@@ -66,40 +83,36 @@ describe('BFF Tasks API (e2e)', () => {
       })
       .expect(201);
 
-    expect(created.body.id).toBe(taskId);
+    expect((created.body as TaskBody).id).toBe(taskId);
 
-    const listed = await request(app.getHttpServer())
-      .get('/api/tasks')
-      .expect(200);
-    expect(listed.body.data).toHaveLength(1);
+    const listed = await request(server()).get('/api/tasks').expect(200);
+    expect((listed.body as PaginatedBody).data).toHaveLength(1);
 
-    await request(app.getHttpServer()).get(`/api/tasks/${taskId}`).expect(200);
+    await request(server()).get(`/api/tasks/${taskId}`).expect(200);
 
-    const updated = await request(app.getHttpServer())
+    const updated = await request(server())
       .patch(`/api/tasks/${taskId}`)
       .send({ status: TaskStatus.COMPLETED })
       .expect(200);
-    expect(updated.body.status).toBe(TaskStatus.COMPLETED);
+    expect((updated.body as TaskBody).status).toBe(TaskStatus.COMPLETED);
 
-    await request(app.getHttpServer())
-      .delete(`/api/tasks/${taskId}`)
-      .expect(204);
+    await request(server()).delete(`/api/tasks/${taskId}`).expect(204);
   });
 
   it('rejects invalid create payloads', async () => {
-    await request(app.getHttpServer())
+    await request(server())
       .post('/api/tasks')
       .send({ title: 'ab' })
       .expect(400);
 
-    await request(app.getHttpServer())
+    await request(server())
       .post('/api/tasks')
       .send({ title: 'Valid title', unknownField: true })
       .expect(400);
   });
 
   it('returns 400 for invalid uuid', async () => {
-    await request(app.getHttpServer()).get('/api/tasks/not-a-uuid').expect(400);
+    await request(server()).get('/api/tasks/not-a-uuid').expect(400);
   });
 
   it('maps upstream 404 into BFF 404', async () => {
@@ -111,7 +124,7 @@ describe('BFF Tasks API (e2e)', () => {
       message: 'Task not found',
     });
 
-    const response = await request(app.getHttpServer())
+    const response = await request(server())
       .get(`/api/tasks/${unknownId}`)
       .expect(404);
 
@@ -124,9 +137,7 @@ describe('BFF Tasks API (e2e)', () => {
   it('returns health ok when API is up', async () => {
     nock(apiBase).get('/api/health').reply(200, { status: 'ok' });
 
-    const response = await request(app.getHttpServer())
-      .get('/api/health')
-      .expect(200);
+    const response = await request(server()).get('/api/health').expect(200);
 
     expect(response.body).toMatchObject({
       status: 'ok',
@@ -137,9 +148,7 @@ describe('BFF Tasks API (e2e)', () => {
   it('returns health degraded when API is down', async () => {
     nock(apiBase).get('/api/health').replyWithError('connection refused');
 
-    const response = await request(app.getHttpServer())
-      .get('/api/health')
-      .expect(503);
+    const response = await request(server()).get('/api/health').expect(503);
 
     expect(response.body).toMatchObject({
       status: 'degraded',
@@ -148,6 +157,6 @@ describe('BFF Tasks API (e2e)', () => {
   });
 
   it('exposes swagger docs', async () => {
-    await request(app.getHttpServer()).get('/api/docs').expect(200);
+    await request(server()).get('/api/docs').expect(200);
   });
 });

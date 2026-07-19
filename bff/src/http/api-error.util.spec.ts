@@ -44,17 +44,23 @@ describe('throwApiError', () => {
 
   it('maps ECONNABORTED and ETIMEDOUT to GatewayTimeout', () => {
     expect(() =>
-      throwApiError(createAxiosError({ code: 'ECONNABORTED', hasResponse: false })),
+      throwApiError(
+        createAxiosError({ code: 'ECONNABORTED', hasResponse: false }),
+      ),
     ).toThrow(GatewayTimeoutException);
 
     expect(() =>
-      throwApiError(createAxiosError({ code: 'ETIMEDOUT', hasResponse: false })),
+      throwApiError(
+        createAxiosError({ code: 'ETIMEDOUT', hasResponse: false }),
+      ),
     ).toThrow(GatewayTimeoutException);
   });
 
   it('maps ECONNREFUSED to BadGateway', () => {
     expect(() =>
-      throwApiError(createAxiosError({ code: 'ECONNREFUSED', hasResponse: false })),
+      throwApiError(
+        createAxiosError({ code: 'ECONNREFUSED', hasResponse: false }),
+      ),
     ).toThrow(BadGatewayException);
   });
 

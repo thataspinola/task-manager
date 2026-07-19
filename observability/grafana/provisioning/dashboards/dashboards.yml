@@ -1,0 +1,12 @@
+# yaml-language-server: $schema=
+apiVersion: 1
+
+providers:
+  - name: task-manager
+    orgId: 1
+    folder: Task Manager
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    options:
+      path: /etc/grafana/provisioning/dashboards/json

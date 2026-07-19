@@ -14,10 +14,7 @@ describe('TasksService + PrismaTasksRepository (integration)', () => {
 
   beforeAll(async () => {
     moduleRef = await Test.createTestingModule({
-      imports: [
-        ConfigModule.forRoot({ isGlobal: true }),
-        PrismaModule,
-      ],
+      imports: [ConfigModule.forRoot({ isGlobal: true }), PrismaModule],
       providers: [
         TasksService,
         {

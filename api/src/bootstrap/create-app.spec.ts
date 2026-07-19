@@ -26,7 +26,6 @@ jest.mock('@nestjs/core', () => ({
 }))
 
 jest.mock('@nestjs/swagger', () => {
-  const actual = jest.requireActual('@nestjs/swagger') as typeof import('@nestjs/swagger')
   const chain = {
     setTitle: jest.fn().mockReturnThis(),
     setDescription: jest.fn().mockReturnThis(),
@@ -36,7 +35,6 @@ jest.mock('@nestjs/swagger', () => {
   }
 
   return {
-    ...actual,
     DocumentBuilder: jest.fn(() => chain),
     SwaggerModule: {
       createDocument: jest.fn().mockReturnValue({}),

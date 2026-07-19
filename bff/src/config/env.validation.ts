@@ -16,4 +16,6 @@ export const envValidationSchema = Joi.object({
     .uri({ scheme: ['http', 'https'] })
     .required(),
   HTTP_TIMEOUT: Joi.number().integer().min(100).max(30000).default(5000),
+  SENTRY_DSN: Joi.string().uri().allow('').optional(),
+  SENTRY_TRACES_SAMPLE_RATE: Joi.number().min(0).max(1).default(0.1),
 });
