@@ -10,7 +10,7 @@ on:
       - ".github/workflows/api-*.yml"
 
 permissions:
-  contents: read
+  contents: write
   pull-requests: write
 
 concurrency:
@@ -135,7 +135,7 @@ jobs:
         run: npm run test:unit
       - name: Testes e2e
         run: npm run test:e2e
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: api-coverage-lcov
           path: api/coverage/lcov.info
@@ -172,18 +172,20 @@ jobs:
     needs: [prepare, lint, build, test, sonar]
     if: always() && needs.prepare.outputs.should_run == 'true' && needs.lint.result == 'success' && needs.build.result == 'success' && needs.test.result == 'success' && (needs.sonar.result == 'success' || needs.sonar.result == 'skipped')
     env:
-      GH_TOKEN: ${{ secrets.AUTOMATION_TOKEN || github.token }}
+      # Prefer GITHUB_TOKEN (permissions do workflow). AUTOMATION_TOKEN só se tiver escopo repo/PR.
+      GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v5
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0
-          token: ${{ secrets.AUTOMATION_TOKEN || github.token }}
       - name: "Create or update PR"
+        continue-on-error: true
         shell: bash
         working-directory: .
         run: |
-          set -euo pipefail
+          set +e
+          set -uo pipefail
           REPO="${{ github.repository }}"
           HEAD="${{ github.ref_name }}"
           BASE="develop"
@@ -217,8 +219,20 @@ jobs:
           fi
 
           if [ -n "$PR_NUMBER" ]; then
-            gh pr edit "$PR_NUMBER" --repo "$REPO" --title "$TITLE" --body "PR automático criado após validação com sucesso."
+            if gh pr edit "$PR_NUMBER" --repo "$REPO" --title "$TITLE" --body "PR automático criado após validação com sucesso."; then
+              echo "PR #$PR_NUMBER atualizado."
+              exit 0
+            fi
+            echo "::warning::Não foi possível atualizar o PR #$PR_NUMBER (permissão do token)."
             exit 0
           fi
 
-          gh pr create --repo "$REPO" --base "$BASE" --head "$HEAD" --title "$TITLE" --body "PR automático criado após validação com sucesso."
+          if gh pr create --repo "$REPO" --base "$BASE" --head "$HEAD" --title "$TITLE" --body "PR automático criado após validação com sucesso."; then
+            echo "PR criado com sucesso."
+            exit 0
+          fi
+
+          echo "::warning::Não foi possível criar o PR automaticamente (token sem createPullRequest)."
+          echo "::notice::Abra manualmente: https://github.com/${REPO}/compare/${BASE}...${HEAD}?expand=1"
+          echo "::notice::Settings → Actions → Workflow permissions → Read and write permissions."
+          exit 0
