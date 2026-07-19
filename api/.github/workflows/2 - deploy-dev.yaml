@@ -1,0 +1,316 @@
+name: Deploy to develop
+
+on:
+  pull_request:
+    branches:
+      - develop
+    types:
+      - closed
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: deploy-dev-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  prepare:
+    name: "1/6 - Prepare"
+    runs-on: ubuntu-latest
+    outputs:
+      should_run: ${{ steps.prepare.outputs.should_run }}
+      target_sha: ${{ steps.prepare.outputs.target_sha }}
+    steps:
+      - name: Decide if workflow should continue
+        id: prepare
+        shell: bash
+        run: |
+          set -euo pipefail
+          PR_MERGED="${{ github.event.pull_request.merged }}"
+          BASE_REF="${{ github.event.pull_request.base.ref }}"
+          HEAD_REF="${{ github.event.pull_request.head.ref }}"
+          MERGE_SHA="${{ github.event.pull_request.merge_commit_sha }}"
+
+          if [ "$PR_MERGED" != "true" ]; then
+            echo "should_run=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ "$BASE_REF" != "develop" ]; then
+            echo "should_run=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          case "$HEAD_REF" in
+            feature/*|fix/*) ;;
+            *)
+              echo "should_run=false" >> "$GITHUB_OUTPUT"
+              exit 0
+              ;;
+          esac
+
+          echo "should_run=true" >> "$GITHUB_OUTPUT"
+          if [ -n "$MERGE_SHA" ]; then
+            echo "target_sha=$MERGE_SHA" >> "$GITHUB_OUTPUT"
+          else
+            echo "target_sha=${{ github.sha }}" >> "$GITHUB_OUTPUT"
+          fi
+
+  lint:
+    name: "2/6 - Lint"
+    runs-on: ubuntu-latest
+    needs: prepare
+    if: ${{ needs.prepare.outputs.should_run == 'true' }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.prepare.outputs.target_sha }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run lint
+      - run: npm run format:check
+
+  build:
+    name: "3/6 - Build"
+    runs-on: ubuntu-latest
+    needs: [prepare, lint]
+    if: ${{ needs.prepare.outputs.should_run == 'true' }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.prepare.outputs.target_sha }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run build
+
+  test:
+    name: "4/6 - Test"
+    runs-on: ubuntu-latest
+    needs: [prepare, lint, build]
+    if: ${{ needs.prepare.outputs.should_run == 'true' }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.prepare.outputs.target_sha }}
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Testes automatizados
+        run: npm test
+
+  create-release-pr:
+    name: "5/6 - Create or update PR promote/* -> release/*"
+    runs-on: ubuntu-latest
+    needs: [prepare, test]
+    if: ${{ needs.prepare.outputs.should_run == 'true' }}
+    env:
+      GH_TOKEN: ${{ secrets.AUTOMATION_TOKEN || github.token }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ secrets.AUTOMATION_TOKEN || github.token }}
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+      - name: Create or update release and promote branches
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          REPO="${{ github.repository }}"
+          SOURCE_BRANCH="develop"
+          BASELINE_BRANCH="main"
+          HOM_WORKFLOW_PATH=".github/workflows/3 - deploy-hom.yaml"
+          PROD_WORKFLOW_PATH=".github/workflows/4 - deploy-prod.yml"
+
+          git fetch origin --prune
+
+          increment_patch() {
+            node -e "
+              const raw = process.argv[1] || '0.0.0';
+              const v = raw.split('.').map(n => Number(n || 0));
+              while (v.length < 3) v.push(0);
+              v[2] += 1;
+              console.log(v.slice(0,3).join('.'));
+            " "$1"
+          }
+
+          version_gt() {
+            node -e "
+              const parse = s => (s || '0.0.0').split('.').map(n => Number(n || 0)).concat([0,0,0]).slice(0,3);
+              const a = parse(process.argv[1]);
+              const b = parse(process.argv[2]);
+              for (let i = 0; i < 3; i++) {
+                if (a[i] > b[i]) process.exit(0);
+                if (a[i] < b[i]) process.exit(1);
+              }
+              process.exit(1);
+            " "$1" "$2"
+          }
+
+          max_version() {
+            local current="$1"
+            shift
+            for candidate in "$@"; do
+              [ -z "$candidate" ] && continue
+              if version_gt "$candidate" "$current"; then
+                current="$candidate"
+              fi
+            done
+            echo "$current"
+          }
+
+          open_release_branch() {
+            gh pr list --repo "$REPO" --state open --json baseRefName,headRefName --jq '.[] | select((.baseRefName | startswith("release/")) and (.headRefName | startswith("promote/"))) | .baseRefName' | head -n 1 || true
+          }
+
+          ensure_pr() {
+            local head_branch="$1"
+            local base_branch="$2"
+            local title="$3"
+            local body="$4"
+            local pr_number
+            pr_number="$(gh pr list --repo "$REPO" --state open --base "$base_branch" --head "$head_branch" --json number --jq '.[0].number // empty')"
+
+            if [ -n "$pr_number" ]; then
+              gh pr edit "$pr_number" --repo "$REPO" --title "$title" --body "$body"
+            else
+              gh pr create --repo "$REPO" --base "$base_branch" --head "$head_branch" --title "$title" --body "$body"
+            fi
+          }
+
+          OPEN_RELEASE_BRANCH="$(open_release_branch)"
+
+          if [ -n "$OPEN_RELEASE_BRANCH" ]; then
+            VERSION="${OPEN_RELEASE_BRANCH#release/}"
+          else
+            PACKAGE_VERSION="$(node -p "require('./package.json').version")"
+            REMOTE_VERSIONS="$(git ls-remote --heads origin 'refs/heads/release/*' 'refs/heads/promote/*' | awk -F'/' '{print $NF}')"
+            HIGHEST_VERSION="$PACKAGE_VERSION"
+            while IFS= read -r version; do
+              [ -z "$version" ] && continue
+              HIGHEST_VERSION="$(max_version "$HIGHEST_VERSION" "$version")"
+            done <<< "$REMOTE_VERSIONS"
+            VERSION="$(increment_patch "$HIGHEST_VERSION")"
+          fi
+
+          RELEASE_BRANCH="release/${VERSION}"
+          PROMOTE_BRANCH="promote/${VERSION}"
+
+          if git ls-remote --exit-code --heads origin "$RELEASE_BRANCH" >/dev/null 2>&1; then
+            git checkout -B "$RELEASE_BRANCH" "origin/$RELEASE_BRANCH"
+          else
+            git checkout -B "$RELEASE_BRANCH" "origin/$BASELINE_BRANCH"
+          fi
+
+          if git cat-file -e "origin/${SOURCE_BRANCH}:${HOM_WORKFLOW_PATH}" 2>/dev/null; then
+            git checkout "origin/${SOURCE_BRANCH}" -- "${HOM_WORKFLOW_PATH}"
+          fi
+
+          if git cat-file -e "origin/${SOURCE_BRANCH}:${PROD_WORKFLOW_PATH}" 2>/dev/null; then
+            git checkout "origin/${SOURCE_BRANCH}" -- "${PROD_WORKFLOW_PATH}"
+          fi
+
+          ensure_package_version() {
+            local target_version="$1"
+            local current_version
+            current_version="$(node -p "require('./package.json').version")"
+
+            if [ "$current_version" != "$target_version" ]; then
+              npm version "$target_version" --no-git-tag-version
+            else
+              echo "package.json já está na versão ${target_version}; a atualização será ignorada."
+            fi
+          }
+
+          ensure_package_version "${VERSION}"
+          git add package.json package-lock.json
+          git add "${HOM_WORKFLOW_PATH}" "${PROD_WORKFLOW_PATH}" || true
+          git commit --allow-empty -m "chore(release): sync ${VERSION} [skip ci]"
+          git push -u origin "$RELEASE_BRANCH" --force-with-lease
+
+          git checkout -B "$PROMOTE_BRANCH" "origin/$SOURCE_BRANCH"
+          ensure_package_version "${VERSION}"
+          git add package.json package-lock.json
+          git commit --allow-empty -m "chore(promote): ${VERSION} [skip ci]"
+          git push -u origin "$PROMOTE_BRANCH" --force-with-lease
+
+          git fetch origin "$SOURCE_BRANCH" "$RELEASE_BRANCH" "$PROMOTE_BRANCH"
+
+          R_SHA="$(git rev-parse "origin/${RELEASE_BRANCH}")"
+          P_SHA="$(git rev-parse "origin/${PROMOTE_BRANCH}")"
+
+          diff_lines_from_develop() {
+            local sha="$1"
+            git diff "origin/${SOURCE_BRANCH}" "$sha" --numstat 2>/dev/null | awk '{s+=$1+$2} END {print s+0}'
+          }
+
+          recreate_promote_from_release_tip() {
+            git fetch origin "${RELEASE_BRANCH}"
+            git branch -D "${PROMOTE_BRANCH}" 2>/dev/null || true
+            git checkout -B "${PROMOTE_BRANCH}" "origin/${RELEASE_BRANCH}"
+            git commit --allow-empty -m "chore(promote): alinhar PR promote → release [skip ci]"
+            git push -u origin "${PROMOTE_BRANCH}" --force-with-lease
+          }
+
+          promote_canonical_replace_release() {
+            git push origin --delete "${RELEASE_BRANCH}" 2>/dev/null || true
+            git fetch origin "${PROMOTE_BRANCH}"
+            git push origin "+refs/heads/${PROMOTE_BRANCH}:refs/heads/${RELEASE_BRANCH}"
+            git push origin --delete "${PROMOTE_BRANCH}" 2>/dev/null || true
+            git checkout -B "${PROMOTE_BRANCH}" "origin/${SOURCE_BRANCH}"
+            ensure_package_version "${VERSION}"
+            git add package.json package-lock.json
+            git commit --allow-empty -m "chore(promote): ${VERSION} [skip ci]"
+            git push -u origin "${PROMOTE_BRANCH}" --force-with-lease
+          }
+
+          DL_R="$(diff_lines_from_develop "$R_SHA")"
+          DL_P="$(diff_lines_from_develop "$P_SHA")"
+
+          if [ "$R_SHA" = "$P_SHA" ]; then
+            git push origin --delete "${PROMOTE_BRANCH}" 2>/dev/null || true
+            recreate_promote_from_release_tip
+          elif git merge-base --is-ancestor "$P_SHA" "$R_SHA"; then
+            git push origin --delete "${PROMOTE_BRANCH}" 2>/dev/null || true
+            recreate_promote_from_release_tip
+          elif git merge-base --is-ancestor "$R_SHA" "$P_SHA"; then
+            promote_canonical_replace_release
+          elif [ "$DL_R" -le "$DL_P" ]; then
+            git push origin --delete "${PROMOTE_BRANCH}" 2>/dev/null || true
+            recreate_promote_from_release_tip
+          else
+            promote_canonical_replace_release
+          fi
+
+          ensure_pr "$PROMOTE_BRANCH" "$RELEASE_BRANCH" "develop → ${RELEASE_BRANCH}" "PR automático criado após validação em DEV para equalizar develop com main antes do fluxo em HOM."
+
+  finish:
+    name: "6/6 - Finish"
+    runs-on: ubuntu-latest
+    needs: [prepare, create-release-pr]
+    if: ${{ needs.prepare.outputs.should_run == 'true' }}
+    steps:
+      - run: echo "Fluxo DEV concluído."
