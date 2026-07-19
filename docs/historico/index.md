@@ -3,6 +3,9 @@
 Registro automático do que entrou em cada push no repositório.
 Cada entrada lista commits, autor e arquivos alterados.
 
-**Total de registros:** 0
+**Total de registros:** 1
 
-_Ainda não há pushes registrados. O próximo push no CI (workflow **Docs**) criará a primeira entrada._
+| Data (UTC) | Branch | SHA | Resumo |
+| ---------- | ------ | --- | ------ |
+| 2026-07-19 01:35:06 UTC | `feature/api` | [Push `87b9ef2`](entries/20260719-013506-87b9ef2.md) | [abrir](entries/20260719-013506-87b9ef2.md) |
+
