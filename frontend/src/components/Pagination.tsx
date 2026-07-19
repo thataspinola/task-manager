@@ -1,4 +1,8 @@
-import type { PaginationMeta } from "../types/task";
+/**
+ * Controles Anterior / Próxima.
+ * Some se só existir 1 página (`totalPages <= 1`).
+ */
+import type { PaginationMeta } from '../types/task';
 
 type PaginationProps = {
   meta: PaginationMeta;
@@ -12,7 +16,6 @@ export function Pagination({
   onPageChange,
 }: PaginationProps) {
   const hasPrevious = meta.page > 1;
-
   const hasNext = meta.page < meta.totalPages;
 
   if (meta.totalPages <= 1) {
@@ -31,7 +34,7 @@ export function Pagination({
       </button>
 
       <span>
-        Página <strong>{meta.page}</strong> de{" "}
+        Página <strong>{meta.page}</strong> de{' '}
         <strong>{meta.totalPages}</strong>
       </span>
 

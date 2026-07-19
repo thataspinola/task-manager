@@ -1,5 +1,10 @@
-import type { Task } from "../types/task";
-import { TaskStatus } from "../types/task";
+/**
+ * Card de uma tarefa: status, editar e pedir exclusão (sem HTTP).
+ */
+import { TaskStatusOptions } from './TaskStatusOptions';
+import { TASK_STATUS_LABELS, parseTaskStatus } from '../lib/task-status';
+import type { Task } from '../types/task';
+import type { TaskStatus } from '../types/task';
 
 type TaskCardProps = {
   task: Task;
@@ -8,12 +13,6 @@ type TaskCardProps = {
   onEdit: (task: Task) => void;
   onDelete: (task: Task) => void;
   onStatusChange: (task: Task, status: TaskStatus) => void;
-};
-
-const statusLabels: Record<TaskStatus, string> = {
-  [TaskStatus.PENDING]: "Pendente",
-  [TaskStatus.IN_PROGRESS]: "Em andamento",
-  [TaskStatus.COMPLETED]: "Concluída",
 };
 
 export function TaskCard({
@@ -30,37 +29,34 @@ export function TaskCard({
     <article className={`task-card task-${task.status.toLowerCase()}`}>
       <div className="task-card-header">
         <span className={`status-badge status-${task.status.toLowerCase()}`}>
-          {statusLabels[task.status]}
+          {TASK_STATUS_LABELS[task.status]}
         </span>
 
         <time
           dateTime={task.createdAt}
-          title={new Date(task.createdAt).toLocaleString("pt-BR")}
+          title={new Date(task.createdAt).toLocaleString('pt-BR')}
         >
           {formatDate(task.createdAt)}
         </time>
       </div>
 
       <h3>{task.title}</h3>
-
-      <p className="task-description">{task.description || "Sem descrição."}</p>
+      <p className="task-description">{task.description || 'Sem descrição.'}</p>
 
       <div className="task-status-control">
         <label htmlFor={`status-${task.id}`}>Alterar status</label>
-
         <select
           id={`status-${task.id}`}
           value={task.status}
           disabled={isBusy}
-          onChange={(event) =>
-            onStatusChange(task, event.target.value as TaskStatus)
-          }
+          onChange={(event) => {
+            const nextStatus = parseTaskStatus(event.target.value);
+            if (nextStatus) {
+              onStatusChange(task, nextStatus);
+            }
+          }}
         >
-          <option value={TaskStatus.PENDING}>Pendente</option>
-
-          <option value={TaskStatus.IN_PROGRESS}>Em andamento</option>
-
-          <option value={TaskStatus.COMPLETED}>Concluída</option>
+          <TaskStatusOptions />
         </select>
       </div>
 
@@ -80,7 +76,7 @@ export function TaskCard({
           disabled={isBusy}
           onClick={() => onDelete(task)}
         >
-          {isDeleting ? "Excluindo..." : "Excluir"}
+          {isDeleting ? 'Excluindo...' : 'Excluir'}
         </button>
       </div>
     </article>
@@ -88,9 +84,9 @@ export function TaskCard({
 }
 
 function formatDate(isoDate: string): string {
-  return new Intl.DateTimeFormat("pt-BR", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
+  return new Intl.DateTimeFormat('pt-BR', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
   }).format(new Date(isoDate));
 }

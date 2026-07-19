@@ -57,8 +57,8 @@ Para receber alarmes, edite `observability/alertmanager/alertmanager.yml` e troq
 ## Sentry (local)
 
 1. Crie conta free: [sentry.io/signup](https://sentry.io/signup/)
-2. **Create Project** → plataforma **Node.js**
-3. Copie o **DSN** (ex. `https://xxxx@o0.ingest.sentry.io/yyyy`)
+2. Projetos **Node.js** (API/BFF) e **React** (frontend)
+3. Copie os **DSN**
 4. Cole em `api/.env` e `bff/.env`:
 
    ```env
@@ -66,9 +66,16 @@ Para receber alarmes, edite `observability/alertmanager/alertmanager.yml` e troq
    SENTRY_TRACES_SAMPLE_RATE=0.1
    ```
 
-5. Reinicie `npm run start:dev`
+5. No frontend (`.env`):
 
-Sem DSN, o Sentry fica desligado. Com DSN, erros 5xx vão pelo `AllExceptionsFilter` para o Sentry.
+   ```env
+   VITE_SENTRY_DSN=https://xxxx@o0.ingest.sentry.io/yyyy
+   VITE_SENTRY_TRACES_SAMPLE_RATE=0.1
+   ```
+
+6. Reinicie as apps
+
+Sem DSN, o Sentry fica desligado. Com DSN, erros 5xx (API/BFF) vão pelo `AllExceptionsFilter`; no browser, `@sentry/react` captura exceções do cliente.
 
 ## SonarQube — scan local via `.env`
 
@@ -86,7 +93,7 @@ Sem DSN, o Sentry fica desligado. Com DSN, erros 5xx vão pelo `AllExceptionsFil
 
    ```bash
    npm run sonar:all
-   # ou: npm run sonar:api / npm run sonar:bff
+   # ou: npm run sonar:api / npm run sonar:bff / npm run sonar:frontend
    ```
 
 Os scripts leem `SONAR_TOKEN` e `SONAR_HOST_URL` do `.env` da raiz.

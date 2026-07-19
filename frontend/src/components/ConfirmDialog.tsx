@@ -1,9 +1,15 @@
-import { useEffect } from "react";
+/**
+ * Diálogo modal genérico de confirmação (labels configuráveis).
+ */
+import { useEffect } from 'react';
 
 type ConfirmDialogProps = {
   open: boolean;
   title: string;
   message: string;
+  confirmLabel?: string;
+  confirmingLabel?: string;
+  cancelLabel?: string;
   isConfirming?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
@@ -13,6 +19,9 @@ export function ConfirmDialog({
   open,
   title,
   message,
+  confirmLabel = 'Confirmar',
+  confirmingLabel = 'Confirmando...',
+  cancelLabel = 'Cancelar',
   isConfirming = false,
   onConfirm,
   onCancel,
@@ -23,15 +32,15 @@ export function ConfirmDialog({
     }
 
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
+      if (event.key === 'Escape') {
         onCancel();
       }
     }
 
-    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener('keydown', handleKeyDown);
 
     return () => {
-      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener('keydown', handleKeyDown);
     };
   }, [open, onCancel]);
 
@@ -56,7 +65,6 @@ export function ConfirmDialog({
         aria-labelledby="dialog-title"
       >
         <h2 id="dialog-title">{title}</h2>
-
         <p>{message}</p>
 
         <div className="dialog-actions">
@@ -66,7 +74,7 @@ export function ConfirmDialog({
             disabled={isConfirming}
             onClick={onCancel}
           >
-            Cancelar
+            {cancelLabel}
           </button>
 
           <button
@@ -75,7 +83,7 @@ export function ConfirmDialog({
             disabled={isConfirming}
             onClick={onConfirm}
           >
-            {isConfirming ? "Excluindo..." : "Confirmar exclusão"}
+            {isConfirming ? confirmingLabel : confirmLabel}
           </button>
         </div>
       </div>

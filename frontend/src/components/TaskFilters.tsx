@@ -1,6 +1,12 @@
-import type { ChangeEvent, FormEvent } from "react";
-import { useEffect, useState } from "react";
-import { TaskStatus } from "../types/task";
+/**
+ * Barra de filtros: busca no submit, status imediato, limpar no App.
+ */
+import type { ChangeEvent, FormEvent } from 'react';
+import { useState } from 'react';
+import { TaskStatusOptions } from './TaskStatusOptions';
+import { hasActiveFilters } from '../lib/task-filters';
+import { parseTaskStatus } from '../lib/task-status';
+import type { TaskStatus } from '../types/task';
 
 type TaskFiltersProps = {
   search: string;
@@ -18,30 +24,28 @@ export function TaskFilters({
   onClear,
 }: TaskFiltersProps) {
   const [searchInput, setSearchInput] = useState(search);
+  const [syncedSearch, setSyncedSearch] = useState(search);
 
-  useEffect(() => {
+  if (search !== syncedSearch) {
+    setSyncedSearch(search);
     setSearchInput(search);
-  }, [search]);
+  }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-
     onSearchChange(searchInput.trim());
   }
 
   function handleStatusChange(event: ChangeEvent<HTMLSelectElement>) {
-    const value = event.target.value;
-
-    onStatusChange(value ? (value as TaskStatus) : undefined);
+    onStatusChange(parseTaskStatus(event.target.value));
   }
 
-  const hasFilters = Boolean(search) || status !== undefined;
+  const filtersActive = hasActiveFilters(search, status);
 
   return (
     <form className="filters" onSubmit={handleSubmit}>
       <div className="field field-grow">
         <label htmlFor="task-search">Buscar</label>
-
         <input
           id="task-search"
           value={searchInput}
@@ -52,19 +56,12 @@ export function TaskFilters({
 
       <div className="field">
         <label htmlFor="task-status">Status</label>
-
         <select
           id="task-status"
-          value={status ?? ""}
+          value={status ?? ''}
           onChange={handleStatusChange}
         >
-          <option value="">Todos</option>
-
-          <option value={TaskStatus.PENDING}>Pendente</option>
-
-          <option value={TaskStatus.IN_PROGRESS}>Em andamento</option>
-
-          <option value={TaskStatus.COMPLETED}>Concluída</option>
+          <TaskStatusOptions includeAll />
         </select>
       </div>
 
@@ -76,9 +73,9 @@ export function TaskFilters({
         <button
           className="button button-secondary"
           type="button"
-          disabled={!hasFilters}
+          disabled={!filtersActive}
           onClick={() => {
-            setSearchInput("");
+            setSearchInput('');
             onClear();
           }}
         >

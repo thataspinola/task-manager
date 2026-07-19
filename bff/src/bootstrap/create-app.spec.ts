@@ -81,10 +81,34 @@ describe('create-app bootstrap', () => {
     const result = configureApp(app);
 
     expect(setGlobalPrefix).toHaveBeenCalledWith('api');
-    expect(enableCors).toHaveBeenCalled();
+    expect(enableCors).toHaveBeenCalledWith(
+      expect.objectContaining({
+        origin: expect.any(Function),
+        methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
+      }),
+    );
     expect(useGlobalPipes).toHaveBeenCalledWith(expect.any(ValidationPipe));
     expect(SwaggerModule.setup).toHaveBeenCalled();
     expect(result).toBe(app);
+
+    const corsOptions = enableCors.mock.calls[0][0] as {
+      origin: (
+        origin: string | undefined,
+        cb: (err: Error | null, allow?: boolean) => void,
+      ) => void;
+    };
+
+    const allow = jest.fn();
+    corsOptions.origin('http://localhost:5173', allow);
+    expect(allow).toHaveBeenCalledWith(null, true);
+
+    const deny = jest.fn();
+    corsOptions.origin('http://evil.example', deny);
+    expect(deny).toHaveBeenCalledWith(expect.any(Error), false);
+
+    const noOrigin = jest.fn();
+    corsOptions.origin(undefined, noOrigin);
+    expect(noOrigin).toHaveBeenCalledWith(null, true);
   });
 
   it('skips swagger when disabled or in production', () => {
