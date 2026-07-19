@@ -1,0 +1,205 @@
+name: Deploy to Prod
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-prod-${{ github.ref_name }}
+  cancel-in-progress: true
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  prepare:
+    name: "1/6 - Prepare"
+    runs-on: ubuntu-latest
+    outputs:
+      should_run: ${{ steps.prepare.outputs.should_run }}
+      target_sha: ${{ steps.prepare.outputs.target_sha }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+      - name: Decide if workflow should continue
+        id: prepare
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Manual: ignora [skip deploy prod] — quem dispara o workflow quer o fluxo.
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+            echo "target_sha=${{ github.sha }}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Push em main: [skip deploy prod] no commit — útil para só docs/manifestos.
+          MSG="$(git log -1 --pretty=%B)"
+          if echo "$MSG" | grep -qi '\[skip deploy prod\]'; then
+            echo "should_run=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Commit com [skip deploy prod] — fluxo PROD ignorado."
+            exit 0
+          fi
+
+          echo "should_run=true" >> "$GITHUB_OUTPUT"
+          echo "target_sha=${{ github.sha }}" >> "$GITHUB_OUTPUT"
+
+  resolve-version:
+    name: "2/6 - Resolver versão (merge)"
+    runs-on: ubuntu-latest
+    needs: prepare
+    if: ${{ needs.prepare.outputs.should_run == 'true' }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.prepare.outputs.target_sha }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - name: Definir versão como a mais recente entre os pais do merge
+        run: |
+          node <<'NODE'
+          const { execSync } = require('child_process');
+          const fs = require('fs');
+
+          function readVer(ref) {
+            try {
+              const raw = execSync(`git show ${ref}:package.json`, { encoding: 'utf8', maxBuffer: 10 * 1024 * 1024 });
+              const v = JSON.parse(raw).version;
+              return typeof v === 'string' && v ? v : null;
+            } catch {
+              return null;
+            }
+          }
+
+          function cmp(a, b) {
+            const pa = String(a || '0.0.0').split('.').map((n) => parseInt(String(n).replace(/\D.*$/, ''), 10) || 0);
+            const pb = String(b || '0.0.0').split('.').map((n) => parseInt(String(n).replace(/\D.*$/, ''), 10) || 0);
+            for (let i = 0; i < 3; i++) {
+              const x = pa[i] ?? 0;
+              const y = pb[i] ?? 0;
+              if (x !== y) return x - y;
+            }
+            return 0;
+          }
+
+          let secondParent = '';
+          try {
+            secondParent = execSync('git rev-parse --verify HEAD^2', { encoding: 'utf8' }).trim();
+          } catch {
+            secondParent = '';
+          }
+
+          if (!secondParent) {
+            console.log('Commit sem segundo pai — não é merge; mantém-se package.json em HEAD.');
+            process.exit(0);
+          }
+
+          const v1 = readVer('HEAD^1');
+          const v2 = readVer('HEAD^2');
+          if (!v1 || !v2) {
+            console.log('Não foi possível ler version em HEAD^1/HEAD^2 — mantém-se package.json em HEAD.');
+            process.exit(0);
+          }
+
+          const fromParents = cmp(v1, v2) >= 0 ? v1 : v2;
+          const cur = JSON.parse(fs.readFileSync('package.json', 'utf8')).version;
+          // Mais recente = máximo entre as duas linhas do merge e o que já está em HEAD (evita downgrade).
+          const target = cmp(cur, fromParents) > 0 ? cur : fromParents;
+
+          if (cmp(cur, target) === 0) {
+            console.log(`Versão em HEAD já é a mais recente (${target}).`);
+            process.exit(0);
+          }
+
+          console.log(`Alinhar versão: HEAD=${cur}, pais ${v1} e ${v2} → ${target}.`);
+          execSync(`npm version ${target} --no-git-tag-version`, { stdio: 'inherit' });
+          NODE
+      - uses: actions/upload-artifact@v7
+        with:
+          name: package-metadata-prod
+          path: |
+            package.json
+            package-lock.json
+          if-no-files-found: error
+
+  lint:
+    name: "3/6 - Lint"
+    runs-on: ubuntu-latest
+    needs: [prepare, resolve-version]
+    if: ${{ needs.prepare.outputs.should_run == 'true' }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.prepare.outputs.target_sha }}
+          fetch-depth: 0
+      - uses: actions/download-artifact@v8
+        with:
+          name: package-metadata-prod
+          path: .
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run lint
+      - run: npm run format:check
+
+  build:
+    name: "4/6 - Build"
+    runs-on: ubuntu-latest
+    needs: [prepare, resolve-version, lint]
+    if: ${{ needs.prepare.outputs.should_run == 'true' }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.prepare.outputs.target_sha }}
+          fetch-depth: 0
+      - uses: actions/download-artifact@v8
+        with:
+          name: package-metadata-prod
+          path: .
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run build
+
+  test:
+    name: "5/6 - Test"
+    runs-on: ubuntu-latest
+    needs: [prepare, resolve-version, lint, build]
+    if: ${{ needs.prepare.outputs.should_run == 'true' }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.prepare.outputs.target_sha }}
+      - uses: actions/download-artifact@v8
+        with:
+          name: package-metadata-prod
+          path: .
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Test
+        run: npm test
+
+  finish:
+    name: "6/6 - Finish"
+    runs-on: ubuntu-latest
+    needs: [prepare, resolve-version, lint, build, test]
+    if: ${{ needs.prepare.outputs.should_run == 'true' }}
+    steps:
+      - run: echo "Fluxo PROD concluído."
