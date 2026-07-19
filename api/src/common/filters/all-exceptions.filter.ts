@@ -1,6 +1,6 @@
 /**
- * Filtro global de erros.
- * Normaliza HttpException e erros conhecidos do Prisma no mesmo formato JSON.
+ * Exception Filter pattern: normaliza HttpException e erros Prisma
+ * no mesmo formato JSON (path, method, timestamp).
  */
 import {
   ArgumentsHost,

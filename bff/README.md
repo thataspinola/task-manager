@@ -1,98 +1,181 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# Task Manager BFF
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+Backend for Frontend (NestJS) que conecta o React à API interna de domínio.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
-
-## Description
-
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
-
-## Project setup
-
-```bash
-$ npm install
+```text
+React (front)  →  BFF (:3002/api)  →  API (:3001/api)  →  PostgreSQL
 ```
 
-## Compile and run the project
+O BFF **não** persiste regras de negócio nem acessa o banco. Ele valida a
+entrada do frontend, encaminha chamadas HTTP tipadas à API e traduz erros
+para um contrato estável.
 
-```bash
-# development
-$ npm run start
+Documentação do monorepo: [../README.md](../README.md)
 
-# watch mode
-$ npm run start:dev
+---
 
-# production mode
-$ npm run start:prod
+## Índice
+
+1. [Papel](#papel)
+2. [Design patterns](#design-patterns)
+3. [Stack e bibliotecas](#stack-e-bibliotecas)
+4. [Estrutura](#estrutura)
+5. [Como rodar](#como-rodar)
+6. [Endpoints](#endpoints)
+7. [Testes](#testes)
+8. [SOLID e Clean Code](#solid-e-clean-code)
+
+---
+
+## Papel
+
+| Responsabilidade | BFF | API |
+| ---------------- | --- | --- |
+| Validar payload do front | sim | sim (defesa em profundidade) |
+| Regras de domínio / CRUD | não | sim |
+| Persistência (Prisma/Postgres) | não | sim |
+| Proxy HTTP tipado | sim | não |
+| Adaptar erros da API para o front | sim | — |
+
+---
+
+## Design patterns
+
+Sim — usamos padrões de forma pragmática (sem overengineering).
+
+| Padrão | Onde | Para quê |
+| ------ | ---- | -------- |
+| **BFF (Backend for Frontend)** | o pacote inteiro | Camada dedicada à UI; isola o browser da API de domínio |
+| **Proxy / Gateway** | `TasksService` | Encaminha CRUD para `/tasks` da API via `HttpService` |
+| **Adapter / Translator** | `http/api-error.util.ts` | Converte `AxiosError` → `HttpException` Nest (502/504/404…) |
+| **DTO** | `tasks/dto/*` | Contrato de entrada/saída + validação + Swagger |
+| **Dependency Injection** | Nest modules | `HttpService`, `ConfigService`, filter via `APP_FILTER` |
+| **Module (feature module)** | `TasksModule`, `HealthModule` | Agrupa controller + service por capacidade |
+| **Exception Filter** | `AllExceptionsFilter` | Resposta de erro JSON uniforme (`path`, `method`, `timestamp`) |
+| **Factory** | `bootstrap/create-app.ts` | `createValidationPipe`, `configureApp`, `setupSwagger` |
+
+### Relação com a API
+
+Na **API** o padrão central extra é o **Repository** (`TasksRepository` +
+`PrismaTasksRepository`) com **DIP**: o service depende da abstração, não do
+Prisma.
+
+No **BFF** não há repository de domínio — o “repositório remoto” é a própria
+API, acessada pelo proxy HTTP.
+
+```text
+BFF:  Controller → Service (proxy) → HttpService → API
+API:  Controller → Service (regras) → Repository → Prisma → PostgreSQL
 ```
 
-## Run tests
+---
 
-```bash
-# unit tests
-$ npm run test
+## Stack e bibliotecas
 
-# e2e tests
-$ npm run test:e2e
+| Biblioteca | Papel | Por quê |
+| ---------- | ----- | ------- |
+| **NestJS** | Framework modular | DI, modules, pipes, filters alinhados a SOLID |
+| **@nestjs/axios** + **axios** | Cliente HTTP | Padrão Nest para chamar a API; timeout e `baseURL` |
+| **@nestjs/config** + **Joi** | Env | Falha cedo se `API_BASE_URL` / `FRONTEND_ORIGIN` inválidos |
+| **class-validator** / **class-transformer** | DTOs | `ValidationPipe` com whitelist |
+| **@nestjs/swagger** | OpenAPI | Docs em `/api/docs` |
+| **@nestjs/mapped-types** | `PartialType` | Update sem duplicar campos do create |
+| **Jest** + **@swc/jest** | Testes unitários | Cobertura 100%, transform rápido |
+| **nock** + **supertest** | Integração / e2e | Mock da API + HTTP real do BFF |
 
-# test coverage
-$ npm run test:cov
+---
+
+## Estrutura
+
+```text
+bff/
+├── src/
+│   ├── bootstrap/          # create-app (CORS, pipes, Swagger)
+│   ├── common/filters/     # AllExceptionsFilter
+│   ├── config/             # envValidationSchema (Joi)
+│   ├── health/             # health do BFF + API
+│   ├── http/               # HttpClientModule + throwApiError
+│   ├── tasks/
+│   │   ├── controller/     # thin HTTP
+│   │   ├── service/        # proxy tipado
+│   │   ├── dto/
+│   │   └── types/
+│   ├── app.module.ts
+│   └── main.ts
+└── test/                   # integração + e2e (nock)
 ```
 
-## Deployment
+---
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+## Como rodar
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+### Requisitos
+
+- Node.js 20+
+- API rodando (padrão em `http://localhost:3001/api`)
+
+### Setup
 
 ```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
+cp .env.example .env
+npm install
+npm run start:dev
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+```env
+NODE_ENV=development
+PORT=3002
+API_BASE_URL=http://localhost:3001/api
+FRONTEND_ORIGIN=http://localhost:5173
+HTTP_TIMEOUT=5000
+```
 
-## Resources
+| Recurso | URL |
+| ------- | --- |
+| BFF | [http://localhost:3002/api](http://localhost:3002/api) |
+| Swagger | [http://localhost:3002/api/docs](http://localhost:3002/api/docs) |
+| Health | [http://localhost:3002/api/health](http://localhost:3002/api/health) |
 
-Check out a few resources that may come in handy when working with NestJS:
+> Em `NODE_ENV=production`, o Swagger fica desligado por padrão.
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+---
 
-## Support
+## Endpoints
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+| Método | Endpoint | Descrição |
+| ------ | -------- | --------- |
+| `POST` | `/api/tasks` | Criar (proxy) |
+| `GET` | `/api/tasks` | Listar (proxy) |
+| `GET` | `/api/tasks/:id` | Buscar (proxy) |
+| `PATCH` | `/api/tasks/:id` | Atualizar (proxy) |
+| `DELETE` | `/api/tasks/:id` | Remover (proxy) |
+| `GET` | `/api/health` | BFF + API (`ok` / `degraded`) |
 
-## Stay in touch
+---
 
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+## Testes
 
-## License
+```bash
+npm run test:all
+```
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+| Tipo | O que cobre |
+| ---- | ----------- |
+| Unitário | Service, controller, filter, `throwApiError`, DTOs, bootstrap, health — **100%** |
+| Integração | `TasksService` + `HttpClientModule` com API mockada (nock) |
+| E2E | Fluxo HTTP do BFF (CRUD, validação, 404 upstream, health, Swagger) |
+
+---
+
+## SOLID e Clean Code
+
+| Princípio | No BFF |
+| --------- | ------ |
+| **S** | Controller só HTTP; service só proxy; `throwApiError` só tradução de erro |
+| **O** | Novos endpoints de proxy sem reescrever o filter/HTTP client |
+| **L** | `HttpService` injetável — trocável por mock nos testes |
+| **I** | Módulos por feature (`Tasks`, `Health`) sem interfaces inchadas |
+| **D** | Dependências via DI do Nest (`HttpService`, `ConfigService`) |
+
+Clean Code: nomes claros, DTOs explícitos, bootstrap único, env validado,
+comentários só no *porquê*.

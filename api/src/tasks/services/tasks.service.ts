@@ -1,6 +1,6 @@
 /**
- * Regras de negócio de Tasks.
- * Não conhece Prisma: só o contrato TasksRepository.
+ * Service layer (regras de negócio de Tasks).
+ * DIP: não conhece Prisma — só o contrato TasksRepository.
  */
 import { Inject, Injectable, NotFoundException } from '@nestjs/common'
 import type { Task } from '../../generated/prisma/client.js'

@@ -1,3 +1,7 @@
+/**
+ * Proxy / Gateway pattern: encaminha CRUD de Tasks para a API interna.
+ * Sem regras de domínio — só transporte HTTP + throwApiError.
+ */
 import { HttpService } from '@nestjs/axios';
 import { Injectable } from '@nestjs/common';
 import { firstValueFrom } from 'rxjs';
@@ -16,7 +20,6 @@ export class TasksService {
       const response = await firstValueFrom(
         this.httpService.post<Task>('/tasks', input),
       );
-
       return response.data;
     } catch (error: unknown) {
       throwApiError(error);
@@ -30,7 +33,6 @@ export class TasksService {
           params: query,
         }),
       );
-
       return response.data;
     } catch (error: unknown) {
       throwApiError(error);
@@ -42,7 +44,6 @@ export class TasksService {
       const response = await firstValueFrom(
         this.httpService.get<Task>(`/tasks/${id}`),
       );
-
       return response.data;
     } catch (error: unknown) {
       throwApiError(error);
@@ -54,7 +55,6 @@ export class TasksService {
       const response = await firstValueFrom(
         this.httpService.patch<Task>(`/tasks/${id}`, input),
       );
-
       return response.data;
     } catch (error: unknown) {
       throwApiError(error);

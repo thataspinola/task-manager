@@ -1,5 +1,5 @@
 /**
- * Bootstrap compartilhado entre produção, e2e e testes.
+ * Factory / bootstrap compartilhado (produção, e2e e testes).
  * Centraliza prefixo `/api`, CORS, ValidationPipe, filter, Swagger e listen.
  */
 import {

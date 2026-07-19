@@ -1,5 +1,6 @@
 /**
- * Endpoints HTTP de Tasks — thin controller: valida entrada e delega ao service.
+ * Thin controller (DTO pattern na entrada).
+ * Só HTTP: valida com pipes/DTOs e delega ao TasksService.
  */
 import {
   Body,

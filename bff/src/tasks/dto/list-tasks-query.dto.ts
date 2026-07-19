@@ -1,6 +1,14 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsEnum, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import {
+  IsEnum,
+  IsInt,
+  IsOptional,
+  IsString,
+  Max,
+  MaxLength,
+  Min,
+} from 'class-validator';
 import { TaskStatus } from '../types/task.type.js';
 
 export class ListTasksQueryDto {
@@ -15,9 +23,11 @@ export class ListTasksQueryDto {
   @ApiPropertyOptional({
     description: 'Busca por título ou descrição',
     example: 'React',
+    maxLength: 120,
   })
   @IsOptional()
   @IsString()
+  @MaxLength(120)
   search?: string;
 
   @ApiPropertyOptional({

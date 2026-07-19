@@ -1,3 +1,7 @@
+/**
+ * Thin controller + DTO pattern (entrada validada).
+ * Endpoints do BFF para Tasks — delega ao proxy TasksService.
+ */
 import {
   Body,
   Controller,
@@ -15,14 +19,18 @@ import {
   ApiBadGatewayResponse,
   ApiBadRequestResponse,
   ApiCreatedResponse,
+  ApiGatewayTimeoutResponse,
   ApiNoContentResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
+  ApiParam,
   ApiTags,
 } from '@nestjs/swagger';
 import { CreateTaskDto } from '../dto/create-task.dto.js';
 import { ListTasksQueryDto } from '../dto/list-tasks-query.dto.js';
+import { PaginatedTasksResponseDto } from '../dto/paginated-tasks-response.dto.js';
+import { TaskResponseDto } from '../dto/task-response.dto.js';
 import { UpdateTaskDto } from '../dto/update-task.dto.js';
 import { TasksService } from '../service/tasks.service.js';
 
@@ -32,19 +40,24 @@ export class TasksController {
   constructor(private readonly tasksService: TasksService) {}
 
   @Post()
+  @HttpCode(HttpStatus.CREATED)
   @ApiOperation({
     summary: 'Criar uma tarefa',
   })
   @ApiCreatedResponse({
-    description: 'Tarefa criada',
+    description: 'Tarefa criada com sucesso',
+    type: TaskResponseDto,
   })
   @ApiBadRequestResponse({
-    description: 'Dados inválidos',
+    description: 'Dados enviados são inválidos',
   })
   @ApiBadGatewayResponse({
-    description: 'API indisponível',
+    description: 'API interna indisponível',
   })
-  create(@Body() input: CreateTaskDto) {
+  @ApiGatewayTimeoutResponse({
+    description: 'A API interna excedeu o tempo de resposta',
+  })
+  create(@Body() input: CreateTaskDto): Promise<TaskResponseDto> {
     return this.tasksService.create(input);
   }
 
@@ -54,14 +67,20 @@ export class TasksController {
   })
   @ApiOkResponse({
     description: 'Lista paginada de tarefas',
+    type: PaginatedTasksResponseDto,
   })
   @ApiBadRequestResponse({
-    description: 'Parâmetros inválidos',
+    description: 'Parâmetros de busca inválidos',
   })
   @ApiBadGatewayResponse({
-    description: 'API indisponível',
+    description: 'API interna indisponível',
   })
-  findAll(@Query() query: ListTasksQueryDto) {
+  @ApiGatewayTimeoutResponse({
+    description: 'A API interna excedeu o tempo de resposta',
+  })
+  findAll(
+    @Query() query: ListTasksQueryDto,
+  ): Promise<PaginatedTasksResponseDto> {
     return this.tasksService.findAll(query);
   }
 
@@ -69,16 +88,27 @@ export class TasksController {
   @ApiOperation({
     summary: 'Consultar uma tarefa',
   })
+  @ApiParam({
+    name: 'id',
+    description: 'UUID da tarefa',
+    format: 'uuid',
+  })
   @ApiOkResponse({
     description: 'Tarefa encontrada',
+    type: TaskResponseDto,
+  })
+  @ApiBadRequestResponse({
+    description: 'UUID inválido',
   })
   @ApiNotFoundResponse({
     description: 'Tarefa não encontrada',
   })
   @ApiBadGatewayResponse({
-    description: 'API indisponível',
+    description: 'API interna indisponível',
   })
-  findOne(@Param('id', new ParseUUIDPipe()) id: string) {
+  findOne(
+    @Param('id', new ParseUUIDPipe()) id: string,
+  ): Promise<TaskResponseDto> {
     return this.tasksService.findOne(id);
   }
 
@@ -86,22 +116,28 @@ export class TasksController {
   @ApiOperation({
     summary: 'Atualizar uma tarefa',
   })
+  @ApiParam({
+    name: 'id',
+    description: 'UUID da tarefa',
+    format: 'uuid',
+  })
   @ApiOkResponse({
     description: 'Tarefa atualizada',
+    type: TaskResponseDto,
+  })
+  @ApiBadRequestResponse({
+    description: 'UUID ou dados enviados são inválidos',
   })
   @ApiNotFoundResponse({
     description: 'Tarefa não encontrada',
   })
-  @ApiBadRequestResponse({
-    description: 'Dados inválidos',
-  })
   @ApiBadGatewayResponse({
-    description: 'API indisponível',
+    description: 'API interna indisponível',
   })
   update(
     @Param('id', new ParseUUIDPipe()) id: string,
     @Body() input: UpdateTaskDto,
-  ) {
+  ): Promise<TaskResponseDto> {
     return this.tasksService.update(id, input);
   }
 
@@ -110,16 +146,24 @@ export class TasksController {
   @ApiOperation({
     summary: 'Excluir uma tarefa',
   })
+  @ApiParam({
+    name: 'id',
+    description: 'UUID da tarefa',
+    format: 'uuid',
+  })
   @ApiNoContentResponse({
     description: 'Tarefa excluída',
+  })
+  @ApiBadRequestResponse({
+    description: 'UUID inválido',
   })
   @ApiNotFoundResponse({
     description: 'Tarefa não encontrada',
   })
   @ApiBadGatewayResponse({
-    description: 'API indisponível',
+    description: 'API interna indisponível',
   })
-  remove(@Param('id', new ParseUUIDPipe()) id: string) {
+  remove(@Param('id', new ParseUUIDPipe()) id: string): Promise<void> {
     return this.tasksService.remove(id);
   }
 }

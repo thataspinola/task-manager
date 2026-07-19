@@ -1,5 +1,5 @@
 /**
- * Contrato de persistência de Tasks (DIP).
+ * Repository pattern + DIP: contrato de persistência de Tasks.
  * O service depende desta abstração; Prisma fica só na implementação.
  */
 import type { Task, TaskStatus } from '../../generated/prisma/client.js'

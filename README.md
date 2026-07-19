@@ -40,7 +40,7 @@ O frontend **não** fala com a API diretamente. O BFF adapta contratos, agrega c
 | Pacote | Status |
 | ------ | ------ |
 | [api](./api) | Pronto: CRUD, paginação, filtros, health, Swagger, testes (unit/integração/e2e) |
-| [bff](./bff) | Em evolução: proxy HTTP de tasks + health + validação de env |
+| [bff](./bff) | Pronto: proxy HTTP de tasks + health + Swagger + testes (unit/integração/e2e) |
 | `front/` | Pasta reservada (Vite/React previsto na porta `5173`) |
 
 ---
@@ -71,6 +71,26 @@ Controller (HTTP)
    → PostgreSQL
 ```
 
+### Fluxo interno do BFF (Proxy)
+
+```text
+Controller (HTTP)
+   → DTO + ValidationPipe
+   → Service (proxy / gateway)
+   → HttpService (Axios)
+   → API interna
+         ↓ (em erro)
+   throwApiError (adapter Axios → Nest)
+```
+
+| Responsabilidade | BFF | API |
+| ---------------- | --- | --- |
+| Validar payload do front | sim | sim (defesa em profundidade) |
+| Regras de domínio / CRUD | não | sim |
+| Persistência (Prisma/Postgres) | não | sim |
+| Proxy HTTP tipado | sim | não |
+| Traduzir erros da API para o front | sim | — |
+
 ---
 
 ## Estrutura do repositório
@@ -84,16 +104,20 @@ task-manager/
 │   │   ├── common/      # Prisma + exception filter
 │   │   ├── config/      # validação de env (Joi)
 │   │   ├── health/
-│   │   ├── tasks/       # feature: controller/service/repository/dto
+│   │   ├── tasks/       # controller / service / repository / dto
 │   │   └── generated/   # Prisma Client gerado
 │   └── test/            # integração + e2e
 ├── bff/                 # Backend for Frontend (NestJS + Axios)
-│   └── src/
-│       ├── http/        # HttpModule configurado para a API
-│       ├── health/
-│       └── tasks/       # proxy tipado dos endpoints de tasks
+│   ├── src/
+│   │   ├── bootstrap/   # create-app (CORS, pipes, Swagger)
+│   │   ├── common/      # exception filter
+│   │   ├── config/      # validação de env (Joi)
+│   │   ├── http/        # HttpClientModule + throwApiError
+│   │   ├── health/      # health do BFF + API
+│   │   └── tasks/       # controller / service (proxy) / dto
+│   └── test/            # integração + e2e (nock)
 ├── front/               # Frontend (reservado)
-└── README.md            # este arquivo
+└── README.md
 ```
 
 ---
@@ -135,8 +159,10 @@ task-manager/
 
 | Biblioteca | Papel | Por que escolhemos |
 | ---------- | ----- | ------------------ |
-| **@nestjs/axios** + **axios** | Cliente HTTP | Padrão Nest para chamar a API; timeout, baseURL e headers centralizados |
+| **@nestjs/axios** + **axios** | Cliente HTTP | Padrão Nest para chamar a API; timeout, baseURL e headers |
 | **@nestjs/mapped-types** | DTOs parciais | `PartialType` no update sem duplicar campos |
+| **@swc/jest** + **@swc/core** | Transform nos testes | Mesma stack rápida da API |
+| **nock** | Mock HTTP | Simula a API em integração/e2e sem subir o Postgres |
 
 O BFF **não** usa Prisma: ele não persiste domínio; só orquestra chamadas à API.
 
@@ -229,9 +255,18 @@ HTTP_TIMEOUT=5000
 npm run start:dev
 ```
 
+| Recurso | URL |
+| ------- | --- |
+| BFF | [http://localhost:3002/api](http://localhost:3002/api) |
+| Swagger | [http://localhost:3002/api/docs](http://localhost:3002/api/docs) |
+| Health | [http://localhost:3002/api/health](http://localhost:3002/api/health) |
+
+> Em `NODE_ENV=production`, o Swagger do BFF também fica desligado por padrão.
+
 ### 3) Frontend
 
-Pasta `front/` ainda sem código. Quando existir, a expectativa é consumir o **BFF**, não a API.
+Pasta `front/` ainda sem código. Quando existir, a expectativa é consumir o **BFF**
+(`FRONTEND_ORIGIN` / porta `5173`), não a API.
 
 ---
 
@@ -250,7 +285,17 @@ Pasta `front/` ainda sem código. Quando existir, a expectativa é consumir o **
 
 ### BFF (`:3002`)
 
-Espelha as operações de tasks via HTTP client apontando para `API_BASE_URL`, além do health do próprio BFF. Detalhes evoluem em [bff/](./bff).
+Espelha as operações de tasks via HTTP client (`API_BASE_URL`) e expõe health
+próprio. Detalhes em [bff/README.md](./bff/README.md).
+
+| Método | Endpoint | Descrição |
+| ------ | -------- | --------- |
+| `POST` | `/api/tasks` | Criar (proxy → API) |
+| `GET` | `/api/tasks` | Listar (proxy → API) |
+| `GET` | `/api/tasks/:id` | Buscar (proxy → API) |
+| `PATCH` | `/api/tasks/:id` | Atualizar (proxy → API) |
+| `DELETE` | `/api/tasks/:id` | Remover (proxy → API) |
+| `GET` | `/api/health` | BFF + API (`ok` / `degraded`) |
 
 ---
 
@@ -260,13 +305,26 @@ Aplicamos de forma pragmática (sem overengineering):
 
 | Princípio | Como aparece no projeto |
 | --------- | ------------------------ |
-| **S**ingle Responsibility | Controller HTTP fino; service com regras; repository com queries |
+| **S**ingle Responsibility | Controller HTTP fino; service com regras (API) ou proxy (BFF); repository com queries |
 | **O**pen/Closed | Novos filtros/status sem reescrever o CRUD inteiro |
-| **L**iskov | Implementação Prisma substitui o contrato do repository |
+| **L**iskov | Implementação Prisma (API) / `HttpService` (BFF) substituíveis por contrato/mock |
 | **I**nterface Segregation | Contrato `TasksRepository` só com operações de task |
-| **D**ependency Inversion | `TasksService` depende de `TASKS_REPOSITORY`, não do Prisma |
+| **D**ependency Inversion | API: service → `TASKS_REPOSITORY`; BFF: DI do Nest para HTTP/config |
 
-Clean Code na prática: nomes claros, DTOs explícitos, um filter de erros, bootstrap único (`create-app`), env validado, comentários só onde explicam o *porquê*.
+### Design patterns (API + BFF)
+
+| Padrão | API | BFF |
+| ------ | --- | --- |
+| **Repository** | `TasksRepository` + Prisma | — (persistência só na API) |
+| **BFF / Proxy** | — | `TasksService` encaminha para a API |
+| **Adapter** | Prisma repository / `PrismaPg` | `throwApiError` (Axios → Nest) |
+| **DTO** | sim | sim |
+| **DI + Module** | Nest feature modules | Nest feature modules |
+| **Exception Filter** | `AllExceptionsFilter` | `AllExceptionsFilter` |
+| **Factory** | `create-app` / pipes / Swagger | idem |
+
+Clean Code na prática: nomes claros, DTOs explícitos, um filter de erros,
+bootstrap único (`create-app`), env validado, comentários só onde explicam o *porquê*.
 
 ---
 
@@ -289,9 +347,14 @@ npm run test:all   # unit (100% coverage) + integração + e2e
 
 ```bash
 cd bff
-npm test
-npm run test:e2e
+npm run test:all   # unit (100% coverage) + integração + e2e
 ```
+
+| Tipo | O que cobre |
+| ---- | ----------- |
+| Unitário | Service, controller, filter, `throwApiError`, DTOs, bootstrap, health |
+| Integração | Service + HttpClient com API mockada (nock) |
+| E2E | Fluxo HTTP completo do BFF |
 
 ---
 
@@ -330,7 +393,7 @@ independentes e deploys separados se necessário.
 ## Documentação por pacote
 
 - API detalhada (endpoints, Prisma, erros): [api/README.md](./api/README.md)
-- BFF: pasta [bff/](./bff) (README do pacote ainda genérico do Nest; a fonte da verdade do monorepo é este arquivo)
+- BFF (padrões, stack, testes): [bff/README.md](./bff/README.md)
 
 ---
 

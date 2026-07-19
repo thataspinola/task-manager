@@ -1,5 +1,5 @@
 /**
- * Adaptador Prisma do contrato TasksRepository.
+ * Adapter do Repository pattern: implementação Prisma do TasksRepository.
  * Toda query SQL/ORM de tasks fica concentrada aqui.
  */
 import { Injectable } from '@nestjs/common'

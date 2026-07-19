@@ -1,6 +1,12 @@
+/**
+ * Módulo raiz do BFF (Module pattern + DI).
+ * Env, HTTP client, health, Tasks; AllExceptionsFilter via APP_FILTER.
+ */
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import Joi from 'joi';
+import { APP_FILTER } from '@nestjs/core';
+import { AllExceptionsFilter } from './common/filters/all-exceptions.filter.js';
+import { envValidationSchema } from './config/env.validation.js';
 import { HealthModule } from './health/health.module.js';
 import { HttpClientModule } from './http/http-client.module.js';
 import { TasksModule } from './tasks/tasks.module.js';
@@ -10,30 +16,21 @@ import { TasksModule } from './tasks/tasks.module.js';
     ConfigModule.forRoot({
       isGlobal: true,
       cache: true,
-
-      validationSchema: Joi.object({
-        NODE_ENV: Joi.string()
-          .valid('development', 'test', 'production')
-          .default('development'),
-
-        PORT: Joi.number().port().default(3002),
-
-        API_BASE_URL: Joi.string().uri().required(),
-
-        FRONTEND_ORIGIN: Joi.string().uri().required(),
-
-        HTTP_TIMEOUT: Joi.number().integer().min(100).max(30000).default(5000),
-      }),
-
+      validationSchema: envValidationSchema,
       validationOptions: {
         allowUnknown: true,
         abortEarly: false,
       },
     }),
-
     HttpClientModule,
     HealthModule,
     TasksModule,
+  ],
+  providers: [
+    {
+      provide: APP_FILTER,
+      useClass: AllExceptionsFilter,
+    },
   ],
 })
 export class AppModule {}

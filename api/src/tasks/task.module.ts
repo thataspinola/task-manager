@@ -1,5 +1,6 @@
 /**
- * Feature Tasks: liga controller → service → repositório Prisma (DIP).
+ * Feature Tasks (Module pattern).
+ * Liga Controller → Service → Repository Prisma (DIP / Repository pattern).
  */
 import { Module } from '@nestjs/common'
 import { TasksController } from './controller/tasks.controller.js'
