@@ -109,7 +109,8 @@
       ]
     },
     "setupFiles": [
-      "reflect-metadata"
+      "reflect-metadata",
+      "<rootDir>/../test/setup-unit-env.ts"
     ],
     "moduleNameMapper": {
       "^(\\.{1,2}/.*)\\.js$": "$1"

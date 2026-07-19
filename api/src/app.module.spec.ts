@@ -1,13 +1,28 @@
 /// <reference types="jest" />
 
-import { Test } from '@nestjs/testing'
-import { AppModule } from './app.module.js'
-import { PrismaModule } from './common/database/prisma.module.js'
-import { PrismaService } from './common/database/prisma.service.js'
-import { TasksModule } from './tasks/task.module.js'
-
 describe('Application modules', () => {
+  const originalEnv = { ...process.env }
+
+  beforeAll(() => {
+    process.env.DATABASE_URL =
+      process.env.DATABASE_URL ??
+      'postgresql://postgres:postgres@localhost:5432/task_manager?schema=public'
+    process.env.NODE_ENV = 'test'
+  })
+
+  afterAll(() => {
+    process.env = originalEnv
+  })
+
   it('wires AppModule providers', async () => {
+    const { Test } = await import('@nestjs/testing')
+    const { AppModule } = await import('./app.module.js')
+    const { PrismaModule } = await import('./common/database/prisma.module.js')
+    const { PrismaService } = await import(
+      './common/database/prisma.service.js'
+    )
+    const { TasksModule } = await import('./tasks/task.module.js')
+
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule],
     })
