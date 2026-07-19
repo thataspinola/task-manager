@@ -36,6 +36,7 @@ describe('sentry helpers', () => {
       dsn: 'https://example@sentry.io/1',
       environment: 'production',
       tracesSampleRate: 0.2,
+      enableLogs: true,
     })
   })
 
