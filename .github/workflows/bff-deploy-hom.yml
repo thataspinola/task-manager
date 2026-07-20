@@ -162,14 +162,45 @@ jobs:
         with:
           fetch-depth: 0
           token: ${{ secrets.AUTOMATION_TOKEN || github.token }}
-      - name: Delete promote branch
+      - name: Delete promote branch when unused
         shell: bash
         working-directory: .
         run: |
           set -euo pipefail
+          REPO="${{ github.repository }}"
           BRANCH="${{ needs.prepare.outputs.promote_branch }}"
-          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git"
-          git push origin --delete "$BRANCH" || true
+          RELEASE="${{ needs.prepare.outputs.release_branch }}"
+
+          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git"
+          git fetch origin "$RELEASE" "$BRANCH" 2>/dev/null || true
+
+          if ! git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
+            echo "${BRANCH} já não existe no remoto."
+            exit 0
+          fi
+
+          OPEN_PR="$(gh pr list --repo "$REPO" --state open --base "$RELEASE" --head "$BRANCH" --json number --jq '.[0].number // empty')"
+          if [ -n "$OPEN_PR" ]; then
+            echo "PR #${OPEN_PR} (${BRANCH} → ${RELEASE}) ainda aberto; mantendo ${BRANCH}."
+            exit 0
+          fi
+
+          MERGED_PR="$(gh pr list --repo "$REPO" --state merged --base "$RELEASE" --head "$BRANCH" --limit 1 --json number --jq '.[0].number // empty')"
+          CONTAINED=false
+          if git rev-parse --verify "origin/${BRANCH}" >/dev/null 2>&1 \
+            && git rev-parse --verify "origin/${RELEASE}" >/dev/null 2>&1 \
+            && git merge-base --is-ancestor "origin/${BRANCH}" "origin/${RELEASE}"; then
+            CONTAINED=true
+          fi
+
+          if [ -n "$MERGED_PR" ] || [ "$CONTAINED" = true ]; then
+            echo "Apagando ${BRANCH} (já consolidada em ${RELEASE})."
+            if ! git push origin --delete "$BRANCH"; then
+              echo "::warning::Não foi possível apagar ${BRANCH} (ruleset/permissões). Apague manualmente ou libere delete em promote/*."
+            fi
+          else
+            echo "promote ainda em uso (sem merge em ${RELEASE}); mantendo ${BRANCH}."
+          fi
 
   create-main-pr:
     name: "6/7 - Create or update PR to main"
