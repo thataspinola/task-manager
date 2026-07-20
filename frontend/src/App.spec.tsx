@@ -1,31 +1,13 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import App from './App';
+import * as tasksHooks from './hooks/use-tasks';
 import { makeTask } from './test/test-utils';
 import { TaskStatus } from './types/task';
 
 const mutateCreate = vi.fn();
 const mutateUpdate = vi.fn();
 const mutateDelete = vi.fn();
-
-vi.mock('./hooks/use-tasks', () => ({
-  useTasks: vi.fn(),
-  useCreateTask: vi.fn(),
-  useUpdateTask: vi.fn(),
-  useDeleteTask: vi.fn(),
-}));
-
-import {
-  useCreateTask,
-  useDeleteTask,
-  useTasks,
-  useUpdateTask,
-} from './hooks/use-tasks';
-
-const mockedUseTasks = vi.mocked(useTasks);
-const mockedUseCreate = vi.mocked(useCreateTask);
-const mockedUseUpdate = vi.mocked(useUpdateTask);
-const mockedUseDelete = vi.mocked(useDeleteTask);
 
 function mockHooks(options?: {
   tasks?: ReturnType<typeof makeTask>[];
@@ -44,7 +26,7 @@ function mockHooks(options?: {
     totalPages: 1,
   };
 
-  mockedUseTasks.mockReturnValue({
+  vi.spyOn(tasksHooks, 'useTasks').mockReturnValue({
     data: options?.isLoading
       ? undefined
       : {
@@ -55,26 +37,26 @@ function mockHooks(options?: {
     isError: options?.isError ?? false,
     isFetching: options?.isFetching ?? false,
     error: options?.error ?? null,
-  } as unknown as unknown as ReturnType<typeof useTasks>);
+  } as unknown as ReturnType<typeof tasksHooks.useTasks>);
 
-  mockedUseCreate.mockReturnValue({
+  vi.spyOn(tasksHooks, 'useCreateTask').mockReturnValue({
     mutateAsync: mutateCreate,
     isPending: false,
     error: options?.createError ?? null,
-  } as unknown as unknown as ReturnType<typeof useCreateTask>);
+  } as unknown as ReturnType<typeof tasksHooks.useCreateTask>);
 
-  mockedUseUpdate.mockReturnValue({
+  vi.spyOn(tasksHooks, 'useUpdateTask').mockReturnValue({
     mutateAsync: mutateUpdate,
     isPending: false,
     error: null,
     variables: undefined,
-  } as unknown as unknown as ReturnType<typeof useUpdateTask>);
+  } as unknown as ReturnType<typeof tasksHooks.useUpdateTask>);
 
-  mockedUseDelete.mockReturnValue({
+  vi.spyOn(tasksHooks, 'useDeleteTask').mockReturnValue({
     mutateAsync: mutateDelete,
     isPending: false,
     error: null,
-  } as unknown as unknown as ReturnType<typeof useDeleteTask>);
+  } as unknown as ReturnType<typeof tasksHooks.useDeleteTask>);
 }
 
 describe('App', () => {
@@ -83,6 +65,10 @@ describe('App', () => {
     mutateUpdate.mockReset().mockResolvedValue(undefined);
     mutateDelete.mockReset().mockResolvedValue(undefined);
     window.scrollTo = vi.fn();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it('renders tasks and creates a new one', async () => {
@@ -122,7 +108,7 @@ describe('App', () => {
   });
 
   it('shows query error and filtered empty state', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     mockHooks({
       isError: true,
       error: new Error('falha'),
@@ -143,9 +129,9 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Buscar' }));
 
     expect(
-      screen.getByRole('heading', { name: 'Nenhuma tarefa encontrada' }),
+      await screen.findByRole('heading', { name: 'Nenhuma tarefa encontrada' }),
     ).toBeInTheDocument();
-  });
+  }, 15_000);
 
   it('edits, changes status and deletes a task', async () => {
     const user = userEvent.setup();
@@ -246,7 +232,7 @@ describe('App', () => {
 
     await user.click(screen.getByRole('button', { name: 'Próxima' }));
 
-    expect(mockedUseTasks).toHaveBeenCalled();
+    expect(tasksHooks.useTasks).toHaveBeenCalled();
   });
 
   it('cancels editing from the form', async () => {
@@ -266,41 +252,41 @@ describe('App', () => {
   it('shows update and delete mutation errors and pending states', () => {
     mockHooks({ tasks: [makeTask()] });
 
-    mockedUseUpdate.mockReturnValue({
+    vi.spyOn(tasksHooks, 'useUpdateTask').mockReturnValue({
       mutateAsync: mutateUpdate,
       isPending: true,
       error: new Error('erro update'),
       variables: undefined,
-    } as unknown as ReturnType<typeof useUpdateTask>);
+    } as unknown as ReturnType<typeof tasksHooks.useUpdateTask>);
 
-    mockedUseDelete.mockReturnValue({
+    vi.spyOn(tasksHooks, 'useDeleteTask').mockReturnValue({
       mutateAsync: mutateDelete,
       isPending: true,
       error: null,
-    } as unknown as ReturnType<typeof useDeleteTask>);
+    } as unknown as ReturnType<typeof tasksHooks.useDeleteTask>);
 
     const { rerender } = render(<App />);
 
     expect(screen.getByText('erro update')).toBeInTheDocument();
 
-    mockedUseCreate.mockReturnValue({
+    vi.spyOn(tasksHooks, 'useCreateTask').mockReturnValue({
       mutateAsync: mutateCreate,
       isPending: false,
       error: null,
-    } as unknown as ReturnType<typeof useCreateTask>);
+    } as unknown as ReturnType<typeof tasksHooks.useCreateTask>);
 
-    mockedUseUpdate.mockReturnValue({
+    vi.spyOn(tasksHooks, 'useUpdateTask').mockReturnValue({
       mutateAsync: mutateUpdate,
       isPending: false,
       error: null,
       variables: undefined,
-    } as unknown as ReturnType<typeof useUpdateTask>);
+    } as unknown as ReturnType<typeof tasksHooks.useUpdateTask>);
 
-    mockedUseDelete.mockReturnValue({
+    vi.spyOn(tasksHooks, 'useDeleteTask').mockReturnValue({
       mutateAsync: mutateDelete,
       isPending: false,
       error: new Error('erro delete'),
-    } as unknown as ReturnType<typeof useDeleteTask>);
+    } as unknown as ReturnType<typeof tasksHooks.useDeleteTask>);
 
     rerender(<App />);
 

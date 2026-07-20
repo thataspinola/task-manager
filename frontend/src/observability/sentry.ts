@@ -6,10 +6,9 @@
  */
 import * as Sentry from '@sentry/react';
 
-export function readDsn(
-  value: string | undefined = import.meta.env.VITE_SENTRY_DSN,
-): string {
-  return (value ?? '').trim();
+export function readDsn(value?: string): string {
+  const raw = value === undefined ? import.meta.env.VITE_SENTRY_DSN : value;
+  return (typeof raw === 'string' ? raw : '').trim();
 }
 
 /** Percentual de traces (0–1). Inválido → 0.1 (10%). */

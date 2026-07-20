@@ -7,11 +7,6 @@ import {
   resolveTracesSampleRate,
 } from './sentry';
 
-vi.mock('@sentry/react', () => ({
-  init: vi.fn(),
-  captureException: vi.fn(),
-}));
-
 describe('sentry', () => {
   const originalDsn = import.meta.env.VITE_SENTRY_DSN;
   const originalRate = import.meta.env.VITE_SENTRY_TRACES_SAMPLE_RATE;
@@ -25,6 +20,7 @@ describe('sentry', () => {
   it('readDsn trims and falls back', () => {
     expect(readDsn('  https://x  ')).toBe('https://x');
     expect(readDsn(undefined)).toBe('');
+    expect(readDsn(null as unknown as string)).toBe('');
   });
 
   it('resolveTracesSampleRate handles defaults and invalid values', () => {

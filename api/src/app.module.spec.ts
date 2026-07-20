@@ -18,9 +18,8 @@ describe('Application modules', () => {
     const { Test } = await import('@nestjs/testing')
     const { AppModule } = await import('./app.module.js')
     const { PrismaModule } = await import('./common/database/prisma.module.js')
-    const { PrismaService } = await import(
-      './common/database/prisma.service.js'
-    )
+    const { PrismaService } =
+      await import('./common/database/prisma.service.js')
     const { TasksModule } = await import('./tasks/task.module.js')
 
     const moduleRef = await Test.createTestingModule({

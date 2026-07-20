@@ -6,8 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b tsconfig.app.json tsconfig.node.json && vite build",
-    "format": "prettier --write \"src/**/*.{ts,tsx}\" \"vite.config.ts\" \"eslint.config.js\"",
-    "format:check": "prettier --check \"src/**/*.{ts,tsx}\" \"vite.config.ts\" \"eslint.config.js\"",
+    "format": "prettier --write \"src/**/*.{ts,tsx}\" \"vite.config.ts\" \"vitest.config.ts\" \"eslint.config.js\"",
+    "format:check": "prettier --check \"src/**/*.{ts,tsx}\" \"vite.config.ts\" \"vitest.config.ts\" \"eslint.config.js\"",
     "lint": "eslint .",
     "preview": "vite preview --port 4173",
     "test": "vitest run --coverage",
@@ -37,6 +37,7 @@
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.3",
+    "@vitest/coverage-istanbul": "^4.1.10",
     "@vitest/coverage-v8": "^4.1.10",
     "eslint": "^10.6.0",
     "eslint-config-prettier": "^10.1.8",

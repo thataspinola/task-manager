@@ -5,6 +5,21 @@
 import Joi from 'joi';
 import { parseCorsOrigins } from './cors-origins.util.js';
 
+export function validateFrontendOrigin(
+  value: unknown,
+  helpers: Joi.CustomHelpers,
+): string | Joi.ErrorReport {
+  if (typeof value !== 'string') {
+    return helpers.error('any.invalid');
+  }
+  try {
+    parseCorsOrigins(value);
+    return value;
+  } catch {
+    return helpers.error('any.invalid');
+  }
+}
+
 export const envValidationSchema = Joi.object({
   NODE_ENV: Joi.string()
     .valid('development', 'production', 'test')
@@ -15,17 +30,7 @@ export const envValidationSchema = Joi.object({
     .required(),
   FRONTEND_ORIGIN: Joi.string()
     .required()
-    .custom((value: unknown, helpers) => {
-      if (typeof value !== 'string') {
-        return helpers.error('any.invalid');
-      }
-      try {
-        parseCorsOrigins(value);
-        return value;
-      } catch {
-        return helpers.error('any.invalid');
-      }
-    })
+    .custom(validateFrontendOrigin)
     .messages({
       'any.invalid':
         'FRONTEND_ORIGIN must be one or more http(s) URLs separated by commas',
