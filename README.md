@@ -32,7 +32,7 @@ O frontend **não** fala com a API diretamente. O BFF adapta contratos, agrega c
 
 | Camada | Pasta | Responsabilidade |
 | ------ | ----- | ---------------- |
-| **Frontend** | `front/` | UI React (em construção) |
+| **Frontend** | `frontend/` | UI React (Vite) — consome só o BFF |
 | **BFF** | `bff/` | Proxy tipado para a API; contratos pensados para o front |
 | **API** | `api/` | Regras de negócio, CRUD, persistência, Swagger |
 | **Banco** | PostgreSQL | Fonte da verdade dos dados |
@@ -43,7 +43,7 @@ O frontend **não** fala com a API diretamente. O BFF adapta contratos, agrega c
 | ------ | ------ |
 | [api](./api) | Pronto: CRUD, paginação, filtros, health, metrics, Swagger, Sentry opcional, testes |
 | [bff](./bff) | Pronto: proxy HTTP, health, metrics, Swagger, Sentry opcional, testes |
-| `front/` | Pasta reservada (Vite/React previsto na porta `5173`) |
+| [frontend](./frontend) | Pronto: React + Vite, TanStack Query, testes 100%, Sentry opcional, CI |
 | [observability/](./observability) | SonarQube Community + Prometheus + Grafana + Alertmanager (Docker) |
 | [docs/](./docs) | MkDocs → GitHub Pages |
 
@@ -54,7 +54,7 @@ O frontend **não** fala com a API diretamente. O BFF adapta contratos, agrega c
 ```text
 ┌─────────────┐     ┌──────────────┐     ┌──────────────┐     ┌────────────┐
 │  React UI   │────▶│  NestJS BFF  │────▶│  NestJS API  │────▶│ PostgreSQL │
-│  (front)    │     │  :3002       │     │  :3001/api   │     │            │
+│  (frontend) │     │  :3002       │     │  :3001/api   │     │            │
 └─────────────┘     └──────────────┘     └──────────────┘     └────────────┘
 ```
 
@@ -124,7 +124,13 @@ task-manager/
 │   │   └── tasks/
 │   ├── sonar-project.properties
 │   └── test/
-├── front/               # Frontend (reservado)
+├── frontend/            # React + Vite
+│   ├── src/
+│   │   ├── api/
+│   │   ├── components/
+│   │   ├── hooks/
+│   │   └── observability/
+│   └── sonar-project.properties
 ├── observability/       # SonarQube + Prometheus + Grafana + Alertmanager
 ├── docs/                # Fonte do MkDocs (GitHub Pages)
 ├── .github/workflows/   # CI na raiz (paths por pacote)
@@ -180,12 +186,15 @@ task-manager/
 
 O BFF **não** usa Prisma: ele não persiste domínio; só orquestra chamadas à API.
 
-### Frontend (`front/`) — planejado
+### Frontend (`frontend/`)
 
-| Biblioteca (prevista) | Papel | Por que |
-| --------------------- | ----- | ------- |
-| **React** | UI | Componente padrão do ecossistema |
-| **Vite** | Bundler/dev server | DX rápida; porta típica `5173` (já no `CORS_ORIGIN` / `FRONTEND_ORIGIN`) |
+| Biblioteca | Papel | Por que |
+| ---------- | ----- | ------- |
+| **React** + **Vite** | UI / DX | Porta `5173`; preview `4173` |
+| **TanStack Query** | Cache e mutações | Invalidação após CRUD |
+| **Axios** | HTTP | Cliente tipado para o BFF |
+| **Vitest** + Testing Library | Testes | Coverage 100% |
+| **@sentry/react** | Erros no browser | Opcional via `VITE_SENTRY_DSN` |
 
 ---
 
@@ -281,8 +290,19 @@ HTTP_TIMEOUT=5000
 
 ### 3) Frontend
 
-Pasta `front/` ainda sem código. Quando existir, a expectativa é consumir o **BFF**
-(`FRONTEND_ORIGIN` / porta `5173`), não a API.
+```bash
+cd frontend
+cp .env.example .env
+npm install
+npm run dev
+```
+
+| | |
+| --- | --- |
+| UI | [http://localhost:5173](http://localhost:5173) |
+| Env | `VITE_BFF_BASE_URL=http://localhost:3002/api` |
+
+O frontend consome **somente** o BFF. Detalhes: [frontend/README.md](./frontend/README.md).
 
 ---
 

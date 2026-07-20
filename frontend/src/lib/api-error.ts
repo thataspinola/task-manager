@@ -1,0 +1,33 @@
+/**
+ * Traduz erros Axios/BFF para mensagem legível (SRP fora do componente UI).
+ */
+import axios from 'axios';
+import type { ApiErrorResponse } from '../types/api-error';
+
+export function extractErrorMessage(error: unknown): string {
+  if (axios.isAxiosError<ApiErrorResponse>(error)) {
+    const message = error.response?.data?.message;
+
+    if (Array.isArray(message)) {
+      return message.join('. ');
+    }
+
+    if (typeof message === 'string') {
+      return message;
+    }
+
+    if (error.code === 'ECONNABORTED') {
+      return 'O BFF demorou mais que o esperado para responder.';
+    }
+
+    if (!error.response) {
+      return 'Não foi possível acessar o BFF.';
+    }
+  }
+
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return 'Ocorreu um erro inesperado.';
+}

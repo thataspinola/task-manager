@@ -7,6 +7,7 @@ import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from '../app.module.js';
+import { parseCorsOrigins } from '../config/cors-origins.util.js';
 
 export type ConfigureAppOptions = {
   swagger?: boolean;
@@ -51,8 +52,24 @@ export function configureApp(
 
   app.setGlobalPrefix('api');
   app.useGlobalPipes(createValidationPipe());
+
+  const allowedOrigins = parseCorsOrigins(
+    configService.getOrThrow<string>('FRONTEND_ORIGIN'),
+  );
+
   app.enableCors({
-    origin: configService.getOrThrow<string>('FRONTEND_ORIGIN'),
+    origin: (
+      origin: string | undefined,
+      callback: (err: Error | null, allow?: boolean) => void,
+    ) => {
+      // Sem Origin (curl/health) ou origem na lista → ok
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+        return;
+      }
+
+      callback(new Error(`Origin ${origin} is not allowed by CORS`), false);
+    },
     methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
   });

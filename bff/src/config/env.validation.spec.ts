@@ -1,6 +1,10 @@
 /// <reference types="jest" />
 
-import { envValidationSchema } from './env.validation.js';
+import Joi from 'joi';
+import {
+  envValidationSchema,
+  validateFrontendOrigin,
+} from './env.validation.js';
 
 type ValidatedEnv = {
   API_BASE_URL: string;
@@ -9,6 +13,37 @@ type ValidatedEnv = {
   HTTP_TIMEOUT: number;
   NODE_ENV: string;
 };
+
+describe('validateFrontendOrigin', () => {
+  const helpers = {
+    error: jest.fn((code: string) => ({ code })),
+  } as unknown as Joi.CustomHelpers;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('rejects non-string values', () => {
+    const result = validateFrontendOrigin(42, helpers);
+
+    expect(helpers.error).toHaveBeenCalledWith('any.invalid');
+    expect(result).toEqual({ code: 'any.invalid' });
+  });
+
+  it('rejects invalid origin strings', () => {
+    const result = validateFrontendOrigin('not-a-url', helpers);
+
+    expect(helpers.error).toHaveBeenCalledWith('any.invalid');
+    expect(result).toEqual({ code: 'any.invalid' });
+  });
+
+  it('returns a valid origin string', () => {
+    const origin = 'http://localhost:5173';
+
+    expect(validateFrontendOrigin(origin, helpers)).toBe(origin);
+    expect(helpers.error).not.toHaveBeenCalled();
+  });
+});
 
 describe('envValidationSchema', () => {
   const validEnv = {
@@ -55,5 +90,16 @@ describe('envValidationSchema', () => {
     });
 
     expect(error).toBeDefined();
+  });
+
+  it('accepts multiple comma-separated FRONTEND_ORIGIN values', () => {
+    const result = envValidationSchema.validate({
+      ...validEnv,
+      FRONTEND_ORIGIN: 'http://localhost:5173,http://localhost:4173',
+    });
+    const value = result.value as ValidatedEnv;
+
+    expect(result.error).toBeUndefined();
+    expect(value.FRONTEND_ORIGIN).toContain('4173');
   });
 });

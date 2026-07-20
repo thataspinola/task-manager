@@ -1,122 +1,124 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
-import './App.css'
+/**
+ * Shell da UI: compõe o board a partir de `useTaskBoard` (sem HTTP direto).
+ */
+import { ConfirmDialog } from './components/ConfirmDialog';
+import { EmptyState } from './components/EmptyState';
+import { ErrorMessage } from './components/ErrorMessage';
+import { LoadingState } from './components/LoadingState';
+import { Pagination } from './components/Pagination';
+import { TaskCard } from './components/TaskCard';
+import { TaskFilters } from './components/TaskFilters';
+import { TaskForm } from './components/TaskForm';
+import { useTaskBoard } from './hooks/use-task-board';
 
 function App() {
-  const [count, setCount] = useState(0)
+  const board = useTaskBoard();
 
   return (
     <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.tsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
+      <header className="app-header">
+        <div className="app-header-content">
+          <div>
+            <span className="eyebrow">Task Manager</span>
+            <h1>Organize seu trabalho</h1>
+            <p>Frontend React integrado ao NestJS BFF.</p>
+          </div>
 
-      <div className="ticks"></div>
-
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
+          <div className="header-summary">
+            <span>Total</span>
+            <strong>{board.meta?.total ?? 0}</strong>
+            <small>tarefas encontradas</small>
+          </div>
         </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
+      </header>
 
-      <div className="ticks"></div>
-      <section id="spacer"></section>
+      <main className="app-layout">
+        <TaskForm
+          key={board.editingTask?.id ?? 'create'}
+          task={board.editingTask}
+          isSubmitting={board.isFormSubmitting}
+          onSubmit={board.submitTask}
+          onCancelEdit={board.cancelEdit}
+        />
+
+        <section className="tasks-section">
+          <div className="section-header">
+            <div>
+              <span className="eyebrow">Visão geral</span>
+              <h2>Suas tarefas</h2>
+            </div>
+          </div>
+
+          <TaskFilters
+            search={board.search}
+            status={board.status}
+            onSearchChange={board.applySearch}
+            onStatusChange={board.applyStatusFilter}
+            onClear={board.clearFilters}
+          />
+
+          {board.mutationError ? (
+            <ErrorMessage error={board.mutationError} />
+          ) : null}
+
+          {board.tasksQuery.isError && (
+            <ErrorMessage
+              error={board.tasksQuery.error}
+              title="Não foi possível carregar as tarefas"
+            />
+          )}
+
+          {board.tasksQuery.isLoading ? (
+            <LoadingState />
+          ) : board.tasks.length === 0 ? (
+            <EmptyState hasFilters={board.hasFilters} />
+          ) : (
+            <div className="task-grid">
+              {board.tasks.map((task) => (
+                <TaskCard
+                  key={task.id}
+                  task={task}
+                  isDeleting={
+                    board.deleteMutation.isPending &&
+                    board.taskPendingDeletion?.id === task.id
+                  }
+                  isUpdating={board.updatingTaskId === task.id}
+                  onEdit={board.startEdit}
+                  onDelete={board.requestDelete}
+                  onStatusChange={board.changeTaskStatus}
+                />
+              ))}
+            </div>
+          )}
+
+          {board.meta && (
+            <Pagination
+              meta={board.meta}
+              disabled={board.tasksQuery.isFetching}
+              onPageChange={board.setPage}
+            />
+          )}
+        </section>
+      </main>
+
+      <ConfirmDialog
+        open={board.taskPendingDeletion !== null}
+        title="Excluir tarefa"
+        message={
+          board.taskPendingDeletion
+            ? `Deseja excluir a tarefa “${board.taskPendingDeletion.title}”? Esta ação não poderá ser desfeita.`
+            : ''
+        }
+        confirmLabel="Confirmar exclusão"
+        confirmingLabel="Excluindo..."
+        isConfirming={board.deleteMutation.isPending}
+        onConfirm={() => {
+          void board.confirmDelete();
+        }}
+        onCancel={board.cancelDelete}
+      />
     </>
-  )
+  );
 }
 
-export default App
+export default App;
