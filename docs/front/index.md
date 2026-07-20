@@ -33,7 +33,7 @@ frontend/
 
 ## Como rodar
 
-Veja [Começar](../comecar.md#4-frontend-porta-5173) e o [README do pacote](../../frontend/README.md).
+Veja [Começar](../comecar.md#4-frontend-porta-5173). Detalhes extras no `frontend/README.md` do repositório.
 
 ```bash
 cd frontend

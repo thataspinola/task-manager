@@ -11,9 +11,7 @@ describe('parseCorsOrigins', () => {
 
   it('parses multiple comma-separated origins', () => {
     expect(
-      parseCorsOrigins(
-        ' http://localhost:5173 , http://localhost:4173 ',
-      ),
+      parseCorsOrigins(' http://localhost:5173 , http://localhost:4173 '),
     ).toEqual(['http://localhost:5173', 'http://localhost:4173']);
   });
 

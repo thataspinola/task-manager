@@ -42,12 +42,24 @@ import {
   setupSwagger,
 } from './create-app.js';
 
+type CorsOriginCallback = (
+  origin: string | undefined,
+  cb: (err: Error | null, allow?: boolean) => void,
+) => void;
+
+type CorsOptions = {
+  origin: CorsOriginCallback;
+  methods: string[];
+};
+
 describe('create-app bootstrap', () => {
   const listen = jest.fn().mockResolvedValue(undefined);
   const useGlobalPipes = jest.fn();
   const enableShutdownHooks = jest.fn();
   const setGlobalPrefix = jest.fn();
-  const enableCors = jest.fn();
+  const enableCors = jest.fn() as jest.MockedFunction<
+    (options: CorsOptions) => void
+  >;
   const configGet = jest.fn();
   const getOrThrow = jest.fn().mockReturnValue('http://localhost:5173');
   const get = jest.fn();
@@ -83,7 +95,6 @@ describe('create-app bootstrap', () => {
     expect(setGlobalPrefix).toHaveBeenCalledWith('api');
     expect(enableCors).toHaveBeenCalledWith(
       expect.objectContaining({
-        origin: expect.any(Function),
         methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
       }),
     );
@@ -91,12 +102,12 @@ describe('create-app bootstrap', () => {
     expect(SwaggerModule.setup).toHaveBeenCalled();
     expect(result).toBe(app);
 
-    const corsOptions = enableCors.mock.calls[0][0] as {
-      origin: (
-        origin: string | undefined,
-        cb: (err: Error | null, allow?: boolean) => void,
-      ) => void;
-    };
+    const corsOptions = enableCors.mock.calls[0]?.[0];
+    expect(corsOptions).toBeDefined();
+    expect(typeof corsOptions?.origin).toBe('function');
+    if (!corsOptions) {
+      throw new Error('expected enableCors to receive cors options');
+    }
 
     const allow = jest.fn();
     corsOptions.origin('http://localhost:5173', allow);

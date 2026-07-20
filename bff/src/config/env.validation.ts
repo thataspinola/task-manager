@@ -15,7 +15,10 @@ export const envValidationSchema = Joi.object({
     .required(),
   FRONTEND_ORIGIN: Joi.string()
     .required()
-    .custom((value, helpers) => {
+    .custom((value: unknown, helpers) => {
+      if (typeof value !== 'string') {
+        return helpers.error('any.invalid');
+      }
       try {
         parseCorsOrigins(value);
         return value;

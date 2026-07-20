@@ -58,12 +58,13 @@ describe('envValidationSchema', () => {
   });
 
   it('accepts multiple comma-separated FRONTEND_ORIGIN values', () => {
-    const { error, value } = envValidationSchema.validate({
+    const result = envValidationSchema.validate({
       ...validEnv,
       FRONTEND_ORIGIN: 'http://localhost:5173,http://localhost:4173',
     });
+    const value = result.value as ValidatedEnv;
 
-    expect(error).toBeUndefined();
-    expect((value as ValidatedEnv).FRONTEND_ORIGIN).toContain('4173');
+    expect(result.error).toBeUndefined();
+    expect(value.FRONTEND_ORIGIN).toContain('4173');
   });
 });
