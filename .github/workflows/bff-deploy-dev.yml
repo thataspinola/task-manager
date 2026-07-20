@@ -262,41 +262,31 @@ jobs:
           git add bff/package.json bff/package-lock.json
           git -C "${{ github.workspace }}" add "${HOM_WORKFLOW_PATH}" "${PROD_WORKFLOW_PATH}" || true
           git commit --allow-empty -m "chore(release): sync ${VERSION} [skip ci]"
-          # release/* e promote/*: ruleset bloqueia force-push.
+          # release/* e promote/*: ruleset bloqueia force-push e costuma bloquear delete.
           git push -u origin "$RELEASE_BRANCH"
 
-          git checkout -B "$PROMOTE_BRANCH" "origin/$SOURCE_BRANCH"
-          ensure_package_version "${VERSION}"
-          git add bff/package.json bff/package-lock.json
-          git commit --allow-empty -m "chore(promote): ${VERSION} [skip ci]"
-
-          # Push promote sem force. Se já existir e divergir, apaga e recria.
-          if git ls-remote --exit-code --heads origin "${PROMOTE_BRANCH}" >/dev/null 2>&1; then
-            if ! git push -u origin "${PROMOTE_BRANCH}"; then
-              git push origin --delete "${PROMOTE_BRANCH}" 2>/dev/null || true
-              git push -u origin "${PROMOTE_BRANCH}"
-            fi
-          else
-            git push -u origin "${PROMOTE_BRANCH}"
-          fi
-
-          git fetch origin "$SOURCE_BRANCH" "$RELEASE_BRANCH" "$PROMOTE_BRANCH"
-
-          # Consolida tudo em release/<version> (sem force-push).
-          # - Mantém a tip com todas as atualizações em release/*
-          # - Remove promote/* antiga
-          # - Recria promote a partir de develop para o PR develop → release
-          recreate_promote_from_develop() {
-            git push origin --delete "${PROMOTE_BRANCH}" 2>/dev/null || true
-            git branch -D "${PROMOTE_BRANCH}" 2>/dev/null || true
+          # Atualiza promote sem rewrite: parte do tip remoto (se existir) e faz merge de develop.
+          sync_promote_from_develop() {
             git fetch origin "${SOURCE_BRANCH}"
-            git checkout -B "${PROMOTE_BRANCH}" "origin/${SOURCE_BRANCH}"
+            git fetch origin "${PROMOTE_BRANCH}" 2>/dev/null || true
+
+            if git ls-remote --exit-code --heads origin "${PROMOTE_BRANCH}" >/dev/null 2>&1; then
+              git checkout -B "${PROMOTE_BRANCH}" "origin/${PROMOTE_BRANCH}"
+              if ! git merge-base --is-ancestor "origin/${SOURCE_BRANCH}" HEAD; then
+                git merge --no-ff "origin/${SOURCE_BRANCH}" \
+                  -m "chore(promote): sync ${SOURCE_BRANCH} into ${PROMOTE_BRANCH} [skip ci]"
+              fi
+            else
+              git checkout -B "${PROMOTE_BRANCH}" "origin/${SOURCE_BRANCH}"
+            fi
+
             ensure_package_version "${VERSION}"
             git add bff/package.json bff/package-lock.json
             git commit --allow-empty -m "chore(promote): ${VERSION} [skip ci]"
             git push -u origin "${PROMOTE_BRANCH}"
           }
 
+          # Consolida tudo em release/<version> (sem force-push / sem depender de delete).
           consolidate_into_release() {
             git fetch origin "${SOURCE_BRANCH}" "${RELEASE_BRANCH}" "${PROMOTE_BRANCH}"
             local r_sha p_sha
@@ -304,23 +294,25 @@ jobs:
             p_sha="$(git rev-parse "origin/${PROMOTE_BRANCH}")"
 
             if [ "$r_sha" = "$p_sha" ]; then
-              echo "release e promote já estão na mesma tip; promote antiga será recriada."
+              echo "release e promote já estão na mesma tip."
             elif git merge-base --is-ancestor "$p_sha" "$r_sha"; then
-              echo "release já contém promote; descartando promote antiga."
+              echo "release já contém promote."
             elif git merge-base --is-ancestor "$r_sha" "$p_sha"; then
               echo "promote contém release; avançando release via fast-forward."
               git push origin "refs/heads/${PROMOTE_BRANCH}:refs/heads/${RELEASE_BRANCH}"
             else
               echo "Branches divergiram; fazendo merge de promote → release."
               git checkout -B "${RELEASE_BRANCH}" "origin/${RELEASE_BRANCH}"
-              git merge --no-ff "origin/${PROMOTE_BRANCH}" -m "chore(release): consolidar ${PROMOTE_BRANCH} em ${RELEASE_BRANCH} [skip ci]"
+              git merge --no-ff "origin/${PROMOTE_BRANCH}" \
+                -m "chore(release): consolidar ${PROMOTE_BRANCH} em ${RELEASE_BRANCH} [skip ci]"
               git push origin "${RELEASE_BRANCH}"
             fi
 
-            echo "Removendo ${PROMOTE_BRANCH} antiga e recriando a partir de ${SOURCE_BRANCH}."
-            recreate_promote_from_develop
+            echo "Sincronizando ${PROMOTE_BRANCH} com ${SOURCE_BRANCH} para o PR."
+            sync_promote_from_develop
           }
 
+          sync_promote_from_develop
           consolidate_into_release
 
           ensure_pr "$PROMOTE_BRANCH" "$RELEASE_BRANCH" "develop → ${RELEASE_BRANCH}" "PR automático criado após validação em DEV para equalizar develop com main antes do fluxo em HOM."
