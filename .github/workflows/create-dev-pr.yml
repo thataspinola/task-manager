@@ -1,0 +1,96 @@
+name: Monorepo - Create PR to develop
+
+# Dispara depois que um Validate (API/BFF/Frontend) termina.
+# Só cria o PR quando não houver outros Validates do mesmo SHA ainda rodando
+# e nenhum tiver falhado — assim um único workflow do monorepo abre feature|fix → develop.
+on:
+  workflow_run:
+    workflows:
+      - "API - Validate"
+      - "BFF - Validate"
+      - "Frontend - Validate"
+    types:
+      - completed
+
+permissions:
+  actions: read
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: create-dev-pr-${{ github.event.workflow_run.head_branch }}
+  cancel-in-progress: true
+
+jobs:
+  create-dev-pr:
+    name: Create or update PR to develop
+    runs-on: ubuntu-latest
+    if: >
+      github.event.workflow_run.conclusion == 'success' &&
+      (startsWith(github.event.workflow_run.head_branch, 'feature/') ||
+       startsWith(github.event.workflow_run.head_branch, 'fix/'))
+    env:
+      GH_TOKEN: ${{ github.token }}
+      HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+      HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+      REPO: ${{ github.repository }}
+    steps:
+      - name: Wait for sibling validates on the same SHA
+        id: barrier
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "SHA: $HEAD_SHA"
+          echo "Branch: $HEAD_BRANCH"
+          echo "Trigger: ${{ github.event.workflow_run.name }}"
+
+          # Lista runs deste commit; filtra pelos três Validates.
+          RUNS_JSON="$(gh api \
+            -H "Accept: application/vnd.github+json" \
+            "/repos/${REPO}/actions/runs?head_sha=${HEAD_SHA}&per_page=100" \
+            --jq '[.workflow_runs[] | select(.name == "API - Validate" or .name == "BFF - Validate" or .name == "Frontend - Validate") | {name, status, conclusion, id}]')"
+
+          echo "Runs no SHA: $RUNS_JSON"
+
+          PENDING="$(echo "$RUNS_JSON" | jq -r '[.[] | select(.status == "queued" or .status == "in_progress" or .status == "waiting" or .status == "requested" or .status == "pending")] | length')"
+          FAILED="$(echo "$RUNS_JSON" | jq -r '[.[] | select(.conclusion == "failure" or .conclusion == "cancelled" or .conclusion == "timed_out")] | length')"
+
+          if [ "$PENDING" -gt 0 ]; then
+            echo "should_create=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Ainda há ${PENDING} validate(s) em andamento neste SHA; outra execução criará o PR."
+            exit 0
+          fi
+
+          if [ "$FAILED" -gt 0 ]; then
+            echo "should_create=false" >> "$GITHUB_OUTPUT"
+            echo "::error::Há ${FAILED} validate(s) com falha neste SHA; PR para develop não será criado."
+            exit 1
+          fi
+
+          # Só cria se existir pelo menos um validate success neste SHA.
+          SUCCESS="$(echo "$RUNS_JSON" | jq -r '[.[] | select(.conclusion == "success")] | length')"
+          if [ "$SUCCESS" -eq 0 ]; then
+            echo "should_create=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Nenhum validate success neste SHA; nada a fazer."
+            exit 0
+          fi
+
+          echo "should_create=true" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout
+        if: steps.barrier.outputs.should_create == 'true'
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          # workflow_run checkout default é o branch default do repo;
+          # precisamos do estado da feature branch no remoto.
+          ref: ${{ env.HEAD_BRANCH }}
+
+      - name: Create or update PR
+        if: steps.barrier.outputs.should_create == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x .github/scripts/create-or-update-dev-pr.sh
+          .github/scripts/create-or-update-dev-pr.sh "$HEAD_BRANCH"
