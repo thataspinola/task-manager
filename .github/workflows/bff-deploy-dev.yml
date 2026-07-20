@@ -262,7 +262,8 @@ jobs:
           git add bff/package.json bff/package-lock.json
           git -C "${{ github.workspace }}" add "${HOM_WORKFLOW_PATH}" "${PROD_WORKFLOW_PATH}" || true
           git commit --allow-empty -m "chore(release): sync ${VERSION} [skip ci]"
-          git push -u origin "$RELEASE_BRANCH" --force-with-lease
+          # release/* tem ruleset sem force-push — só push normal (fast-forward).
+          git push -u origin "$RELEASE_BRANCH"
 
           git checkout -B "$PROMOTE_BRANCH" "origin/$SOURCE_BRANCH"
           ensure_package_version "${VERSION}"
@@ -288,16 +289,23 @@ jobs:
             git push -u origin "${PROMOTE_BRANCH}" --force-with-lease
           }
 
-          promote_canonical_replace_release() {
-            git push origin --delete "${RELEASE_BRANCH}" 2>/dev/null || true
-            git fetch origin "${PROMOTE_BRANCH}"
-            git push origin "+refs/heads/${PROMOTE_BRANCH}:refs/heads/${RELEASE_BRANCH}"
-            git push origin --delete "${PROMOTE_BRANCH}" 2>/dev/null || true
-            git checkout -B "${PROMOTE_BRANCH}" "origin/${SOURCE_BRANCH}"
-            ensure_package_version "${VERSION}"
-            git add bff/package.json bff/package-lock.json
-            git commit --allow-empty -m "chore(promote): ${VERSION} [skip ci]"
-            git push -u origin "${PROMOTE_BRANCH}" --force-with-lease
+          # Sem force-push em release/* (ruleset GH013). Fast-forward quando possível;
+          # senão só mantém promote e abre o PR.
+          promote_fast_forward_release() {
+            git fetch origin "${RELEASE_BRANCH}" "${PROMOTE_BRANCH}"
+            if git merge-base --is-ancestor "origin/${RELEASE_BRANCH}" "origin/${PROMOTE_BRANCH}"; then
+              if git push origin "refs/heads/${PROMOTE_BRANCH}:refs/heads/${RELEASE_BRANCH}"; then
+                echo "release atualizado via fast-forward a partir de promote."
+                git push origin --delete "${PROMOTE_BRANCH}" 2>/dev/null || true
+                git checkout -B "${PROMOTE_BRANCH}" "origin/${SOURCE_BRANCH}"
+                ensure_package_version "${VERSION}"
+                git add bff/package.json bff/package-lock.json
+                git commit --allow-empty -m "chore(promote): ${VERSION} [skip ci]"
+                git push -u origin "${PROMOTE_BRANCH}" --force-with-lease
+                return 0
+              fi
+            fi
+            echo "::notice::Não foi possível avançar release sem force-push; abrindo PR promote → release."
           }
 
           DL_R="$(diff_lines_from_develop "$R_SHA")"
@@ -310,12 +318,12 @@ jobs:
             git push origin --delete "${PROMOTE_BRANCH}" 2>/dev/null || true
             recreate_promote_from_release_tip
           elif git merge-base --is-ancestor "$R_SHA" "$P_SHA"; then
-            promote_canonical_replace_release
+            promote_fast_forward_release
           elif [ "$DL_R" -le "$DL_P" ]; then
             git push origin --delete "${PROMOTE_BRANCH}" 2>/dev/null || true
             recreate_promote_from_release_tip
           else
-            promote_canonical_replace_release
+            promote_fast_forward_release
           fi
 
           ensure_pr "$PROMOTE_BRANCH" "$RELEASE_BRANCH" "develop → ${RELEASE_BRANCH}" "PR automático criado após validação em DEV para equalizar develop com main antes do fluxo em HOM."
