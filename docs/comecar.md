@@ -106,7 +106,7 @@ SonarQube pode levar 1–2 min na primeira subida.
 
 ### Sentry + Sonar (tokens no `.env`)
 
-**Sentry** — em [sentry.io](https://sentry.io) crie um projeto Node.js, copie o DSN e cole em `api/.env` e `bff/.env` (`SENTRY_DSN=...`). Reinicie as apps.
+**Sentry** — em [sentry.io](https://sentry.io) crie projetos Node (API/BFF) e Browser/React (frontend), copie o DSN e cole em `api/.env`, `bff/.env` (`SENTRY_DSN`) e `frontend/.env` (`VITE_SENTRY_DSN`). Reinicie as apps.
 
 **Sonar** — com a stack no ar (`http://localhost:9000`):
 
@@ -118,10 +118,22 @@ npm run sonar:all
 
 Detalhes: [Observabilidade](observabilidade.md).
 
-## 4) Frontend
+## 4) Frontend (porta 5173)
 
-A pasta `front/` ainda está reservada. Quando existir, deve consumir o **BFF**
-(`FRONTEND_ORIGIN` / porta `5173`), nunca a API diretamente.
+```bash
+cd frontend
+cp .env.example .env
+npm install
+npm run dev
+```
+
+```env
+VITE_BFF_BASE_URL=http://localhost:3002/api
+```
+
+Abra [`http://localhost:5173`](http://localhost:5173). O frontend fala **somente** com o BFF.
+
+Sentry no browser (opcional): `VITE_SENTRY_DSN` no `.env` do frontend.
 
 ## Documentação local (MkDocs)
 

@@ -1,30 +1,27 @@
-import { httpClient } from "./http-client";
+/**
+ * Facade HTTP tipada para `/tasks` no BFF.
+ */
+import { httpClient } from './http-client';
 import type {
   CreateTaskInput,
   ListTasksParams,
   PaginatedTasks,
   Task,
   UpdateTaskInput,
-} from "../types/task";
+} from '../types/task';
 
 export async function listTasks(
   params: ListTasksParams,
 ): Promise<PaginatedTasks> {
-  const response = await httpClient.get<PaginatedTasks>("/tasks", {
+  const response = await httpClient.get<PaginatedTasks>('/tasks', {
     params,
   });
 
   return response.data;
 }
 
-export async function getTask(id: string): Promise<Task> {
-  const response = await httpClient.get<Task>(`/tasks/${id}`);
-
-  return response.data;
-}
-
 export async function createTask(input: CreateTaskInput): Promise<Task> {
-  const response = await httpClient.post<Task>("/tasks", input);
+  const response = await httpClient.post<Task>('/tasks', input);
 
   return response.data;
 }

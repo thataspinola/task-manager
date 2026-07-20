@@ -42,12 +42,24 @@ import {
   setupSwagger,
 } from './create-app.js';
 
+type CorsOriginCallback = (
+  origin: string | undefined,
+  cb: (err: Error | null, allow?: boolean) => void,
+) => void;
+
+type CorsOptions = {
+  origin: CorsOriginCallback;
+  methods: string[];
+};
+
 describe('create-app bootstrap', () => {
   const listen = jest.fn().mockResolvedValue(undefined);
   const useGlobalPipes = jest.fn();
   const enableShutdownHooks = jest.fn();
   const setGlobalPrefix = jest.fn();
-  const enableCors = jest.fn();
+  const enableCors = jest.fn() as jest.MockedFunction<
+    (options: CorsOptions) => void
+  >;
   const configGet = jest.fn();
   const getOrThrow = jest.fn().mockReturnValue('http://localhost:5173');
   const get = jest.fn();
@@ -81,10 +93,33 @@ describe('create-app bootstrap', () => {
     const result = configureApp(app);
 
     expect(setGlobalPrefix).toHaveBeenCalledWith('api');
-    expect(enableCors).toHaveBeenCalled();
+    expect(enableCors).toHaveBeenCalledWith(
+      expect.objectContaining({
+        methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
+      }),
+    );
     expect(useGlobalPipes).toHaveBeenCalledWith(expect.any(ValidationPipe));
     expect(SwaggerModule.setup).toHaveBeenCalled();
     expect(result).toBe(app);
+
+    const corsOptions = enableCors.mock.calls[0]?.[0];
+    expect(corsOptions).toBeDefined();
+    expect(typeof corsOptions?.origin).toBe('function');
+    if (!corsOptions) {
+      throw new Error('expected enableCors to receive cors options');
+    }
+
+    const allow = jest.fn();
+    corsOptions.origin('http://localhost:5173', allow);
+    expect(allow).toHaveBeenCalledWith(null, true);
+
+    const deny = jest.fn();
+    corsOptions.origin('http://evil.example', deny);
+    expect(deny).toHaveBeenCalledWith(expect.any(Error), false);
+
+    const noOrigin = jest.fn();
+    corsOptions.origin(undefined, noOrigin);
+    expect(noOrigin).toHaveBeenCalledWith(null, true);
   });
 
   it('skips swagger when disabled or in production', () => {

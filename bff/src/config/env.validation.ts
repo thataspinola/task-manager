@@ -1,8 +1,24 @@
 /**
  * Schema Joi das variáveis do BFF.
- * Falha no boot se API_BASE_URL / FRONTEND_ORIGIN estiverem inválidos.
+ * FRONTEND_ORIGIN aceita uma URL ou várias separadas por vírgula (dev + preview).
  */
 import Joi from 'joi';
+import { parseCorsOrigins } from './cors-origins.util.js';
+
+export function validateFrontendOrigin(
+  value: unknown,
+  helpers: Joi.CustomHelpers,
+): string | Joi.ErrorReport {
+  if (typeof value !== 'string') {
+    return helpers.error('any.invalid');
+  }
+  try {
+    parseCorsOrigins(value);
+    return value;
+  } catch {
+    return helpers.error('any.invalid');
+  }
+}
 
 export const envValidationSchema = Joi.object({
   NODE_ENV: Joi.string()
@@ -13,8 +29,12 @@ export const envValidationSchema = Joi.object({
     .uri({ scheme: ['http', 'https'] })
     .required(),
   FRONTEND_ORIGIN: Joi.string()
-    .uri({ scheme: ['http', 'https'] })
-    .required(),
+    .required()
+    .custom(validateFrontendOrigin)
+    .messages({
+      'any.invalid':
+        'FRONTEND_ORIGIN must be one or more http(s) URLs separated by commas',
+    }),
   HTTP_TIMEOUT: Joi.number().integer().min(100).max(30000).default(5000),
   SENTRY_DSN: Joi.string().uri().allow('').optional(),
   SENTRY_TRACES_SAMPLE_RATE: Joi.number().min(0).max(1).default(0.1),

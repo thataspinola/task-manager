@@ -62,7 +62,9 @@ task-manager/
 │   ├── src/metrics/
 │   ├── src/observability/
 │   └── sonar-project.properties
-├── front/               # Frontend (reservado)
+├── frontend/            # React + Vite (UI)
+│   ├── src/observability/
+│   └── sonar-project.properties
 ├── observability/       # Sonar + Prometheus + Grafana + Alertmanager
 ├── docs/                # MkDocs → GitHub Pages
 ├── .github/workflows/   # CI na raiz (paths por pacote)

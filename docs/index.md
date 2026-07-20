@@ -14,7 +14,7 @@ O frontend **não** fala com a API diretamente. O BFF adapta contratos, agrega c
 | ------ | ------ |
 | [API](api/index.md) | CRUD, health, metrics, Swagger, Sentry opcional, testes |
 | [BFF](bff/index.md) | Proxy HTTP, health, metrics, Swagger, Sentry opcional, testes |
-| [Frontend](front/index.md) | Pasta reservada (Vite/React na porta `5173`) |
+| [Frontend](front/index.md) | React + Vite, testes 100%, Sentry opcional, CI validate |
 | Observabilidade | SonarQube Community + Prometheus + Grafana + Alertmanager |
 
 ## Navegação rápida
@@ -22,7 +22,7 @@ O frontend **não** fala com a API diretamente. O BFF adapta contratos, agrega c
 | Seção | Conteúdo |
 | ----- | -------- |
 | [Arquitetura](arquitetura.md) | Fluxos e responsabilidades |
-| [Começar](comecar.md) | Subir API, BFF, banco e stack de obs |
+| [Começar](comecar.md) | Subir API, BFF, frontend, banco e stack de obs |
 | [Testes](testes.md) | Unitários, integração e e2e |
 | [CI/CD](ci-cd.md) | Workflows, Sonar e GitHub Pages |
 | [Observabilidade](observabilidade.md) | Métricas, alarmes, Sentry, Sonar |
@@ -34,7 +34,7 @@ O frontend **não** fala com a API diretamente. O BFF adapta contratos, agrega c
 | ------- | ----- | --------- |
 | API | `3001` | `/api` · metrics `/api/metrics` |
 | BFF | `3002` | `/api` · metrics `/api/metrics` |
-| Frontend (previsto) | `5173` | — |
+| Frontend | `5173` | Vite dev · preview `4173` |
 | SonarQube | `9000` | UI |
 | Prometheus | `9090` | UI |
 | Grafana | `3000` | UI (`admin` / `admin`) |
