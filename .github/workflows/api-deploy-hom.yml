@@ -195,7 +195,9 @@ jobs:
 
           if [ -n "$MERGED_PR" ] || [ "$CONTAINED" = true ]; then
             echo "Apagando ${BRANCH} (já consolidada em ${RELEASE})."
-            git push origin --delete "$BRANCH"
+            if ! git push origin --delete "$BRANCH"; then
+              echo "::warning::Não foi possível apagar ${BRANCH} (ruleset/permissões). Apague manualmente ou libere delete em promote/*."
+            fi
           else
             echo "promote ainda em uso (sem merge em ${RELEASE}); mantendo ${BRANCH}."
           fi
