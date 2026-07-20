@@ -38,7 +38,10 @@ jobs:
        (startsWith(github.event.workflow_run.head_branch, 'feature/') ||
         startsWith(github.event.workflow_run.head_branch, 'fix/')))
     env:
-      GH_TOKEN: ${{ github.token }}
+      # GITHUB_TOKEN sozinho não pode criar PR a menos que a setting
+      # "Allow GitHub Actions to create and approve pull requests" esteja ligada.
+      # Preferir PAT/App em AUTOMATION_TOKEN (mesmo padrão dos deploys).
+      GH_TOKEN: ${{ secrets.AUTOMATION_TOKEN || github.token }}
       HEAD_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
       HEAD_BRANCH: ${{ github.event.workflow_run.head_branch || github.ref_name }}
       REPO: ${{ github.repository }}
@@ -120,11 +123,19 @@ jobs:
         with:
           fetch-depth: 0
           ref: ${{ env.HEAD_BRANCH }}
+          token: ${{ secrets.AUTOMATION_TOKEN || github.token }}
 
       - name: Create or update PR
         if: steps.barrier.outputs.should_create == 'true'
         shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.AUTOMATION_TOKEN || github.token }}
         run: |
           set -euo pipefail
+          if [ -z "${{ secrets.AUTOMATION_TOKEN }}" ]; then
+            echo "::warning::AUTOMATION_TOKEN ausente — usando GITHUB_TOKEN."
+            echo "::notice::Se falhar createPullRequest: Settings → Actions → General → Workflow permissions → marque 'Allow GitHub Actions to create and approve pull requests'."
+            echo "::notice::Ou crie o secret AUTOMATION_TOKEN (PAT com repo) como nos workflows de deploy."
+          fi
           chmod +x .github/scripts/create-or-update-dev-pr.sh
           .github/scripts/create-or-update-dev-pr.sh "$HEAD_BRANCH"

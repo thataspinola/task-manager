@@ -51,10 +51,21 @@ fi
 PR_NUMBER="$(gh pr list --repo "$REPO" --state open --base "$BASE" --head "$HEAD" --json number --jq '.[0].number // empty')"
 
 if [ -n "$PR_NUMBER" ]; then
-  gh pr edit "$PR_NUMBER" --repo "$REPO" --title "$TITLE" --body "$BODY"
+  if ! gh pr edit "$PR_NUMBER" --repo "$REPO" --title "$TITLE" --body "$BODY"; then
+    echo "::error::Falha ao atualizar o PR #$PR_NUMBER (permissão do token)."
+    echo "::notice::Settings → Actions → Workflow permissions → 'Allow GitHub Actions to create and approve pull requests'"
+    echo "::notice::Ou configure o secret AUTOMATION_TOKEN (PAT com escopo repo)."
+    exit 1
+  fi
   echo "PR #$PR_NUMBER atualizado: https://github.com/${REPO}/pull/${PR_NUMBER}"
   exit 0
 fi
 
-URL="$(gh pr create --repo "$REPO" --base "$BASE" --head "$HEAD" --title "$TITLE" --body "$BODY")"
+if ! URL="$(gh pr create --repo "$REPO" --base "$BASE" --head "$HEAD" --title "$TITLE" --body "$BODY")"; then
+  echo "::error::Falha ao criar o PR (createPullRequest negado ou token sem permissão)."
+  echo "::notice::Settings → Actions → Workflow permissions → marque 'Allow GitHub Actions to create and approve pull requests'."
+  echo "::notice::Ou configure o secret AUTOMATION_TOKEN (PAT com escopo repo), como nos deploys."
+  echo "::notice::Abra manualmente: https://github.com/${REPO}/compare/${BASE}...${HEAD}?expand=1"
+  exit 1
+fi
 echo "PR criado: $URL"
