@@ -5,8 +5,14 @@ on:
     branches:
       - "release/**"
     paths:
-      - 'bff/**'
-      - '.github/workflows/bff-*.yml'
+      - "bff/**"
+      - ".github/workflows/bff-*.yml"
+  # Merge promote → release deve sempre iniciar HOM + PR release→main
+  # (mesmo sem diff em bff/**, ex.: conteúdo já alinhado antes do merge).
+  pull_request:
+    types: [closed]
+    branches:
+      - "release/**"
   workflow_dispatch:
     inputs:
       release_branch:
@@ -15,15 +21,16 @@ on:
         type: string
       target_sha:
         description: "SHA opcional (vazio - último commit da branch)"
-        required: true
+        required: false
         type: string
+        default: ""
 
 permissions:
   contents: write
   pull-requests: write
 
 concurrency:
-  group: bff-deploy-hom-${{ github.ref_name }}-${{ github.sha }}
+  group: bff-deploy-hom-${{ github.event.pull_request.base.ref || github.ref_name }}
   cancel-in-progress: true
 
 env:
@@ -53,6 +60,43 @@ jobs:
         run: |
           set -euo pipefail
           EVENT="${{ github.event_name }}"
+
+          if [ "$EVENT" = "pull_request" ]; then
+            MERGED="${{ github.event.pull_request.merged }}"
+            REL="${{ github.event.pull_request.base.ref }}"
+            HEAD="${{ github.event.pull_request.head.ref }}"
+            TIP="${{ github.event.pull_request.merge_commit_sha }}"
+
+            if [ "$MERGED" != "true" ]; then
+              echo "PR fechado sem merge; ignorando."
+              echo "should_run=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+
+            case "$REL" in
+              release/*) ;;
+              *)
+                echo "should_run=false" >> "$GITHUB_OUTPUT"
+                exit 0
+                ;;
+            esac
+
+            case "$HEAD" in
+              promote/*) ;;
+              *)
+                echo "Merge em ${REL} sem head promote/* (${HEAD}); ignorando create-main-pr automático."
+                echo "should_run=false" >> "$GITHUB_OUTPUT"
+                exit 0
+                ;;
+            esac
+
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+            echo "release_branch=$REL" >> "$GITHUB_OUTPUT"
+            VERSION="${REL#release/}"
+            echo "promote_branch=promote/${VERSION}" >> "$GITHUB_OUTPUT"
+            echo "target_sha=$TIP" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
 
           if [ "$EVENT" = "push" ]; then
             REL="${{ github.ref_name }}"
