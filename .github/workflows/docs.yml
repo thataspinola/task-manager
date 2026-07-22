@@ -16,7 +16,7 @@ on:
 
 concurrency:
   group: docs-${{ github.ref_name }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -34,7 +34,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.AUTOMATION_TOKEN || secrets.GITHUB_TOKEN }}
 
       - name: Setup Python
         uses: actions/setup-python@v6
@@ -46,18 +46,44 @@ jobs:
       - name: Instalar dependências do MkDocs
         run: pip install -r requirements-docs.txt
 
-      - name: Gerar log do push no histórico
+      - name: Commitar histórico no tip atual (retry)
         env:
           PUSH_BEFORE: ${{ github.event.before }}
-        run: python scripts/generate_push_log.py
+          BRANCH: ${{ github.ref_name }}
+          GH_TOKEN: ${{ secrets.AUTOMATION_TOKEN || secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
 
-      - name: Commitar histórico (quando houver mudanças)
-        uses: stefanzweifel/git-auto-commit-action@v7
-        with:
-          commit_message: "docs: registrar push no histórico MkDocs [skip ci]"
-          file_pattern: docs/historico/**
-          commit_user_name: github-actions[bot]
-          commit_user_email: github-actions[bot]@users.noreply.github.com
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git"
+
+          # Regenera sempre em cima do tip remoto para evitar diverge/non-fast-forward.
+          for i in $(seq 1 8); do
+            git fetch origin "$BRANCH"
+            git checkout -B "$BRANCH" "origin/${BRANCH}"
+
+            python scripts/generate_push_log.py
+            git add docs/historico/
+
+            if git diff --cached --quiet; then
+              echo "Sem mudanças no histórico para commitar."
+              exit 0
+            fi
+
+            git commit -m "docs: registrar push no histórico MkDocs [skip ci]"
+
+            if git push origin "HEAD:${BRANCH}"; then
+              echo "Histórico publicado em ${BRANCH}."
+              exit 0
+            fi
+
+            echo "Push rejeitado (corrida em ${BRANCH}); refetch e retry (${i}/8)."
+            git reset --hard "origin/${BRANCH}"
+            sleep $((i + 1))
+          done
+
+          echo "::warning::Não foi possível publicar o histórico após retries; seguindo com o build."
 
       - name: Build MkDocs
         run: python -m mkdocs build --strict
