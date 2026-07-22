@@ -1,12 +1,15 @@
 name: BFF - Deploy Homol
 
 on:
+  # Sem filtro paths: o merge promote→release frequentemente não toca bff/**
+  # (conteúdo já alinhado). O job prepare só segue em merge de promote.
   push:
     branches:
       - "release/**"
-    paths:
-      - 'bff/**'
-      - '.github/workflows/bff-*.yml'
+  pull_request:
+    types: [closed]
+    branches:
+      - "release/**"
   workflow_dispatch:
     inputs:
       release_branch:
@@ -15,15 +18,16 @@ on:
         type: string
       target_sha:
         description: "SHA opcional (vazio - último commit da branch)"
-        required: true
+        required: false
         type: string
+        default: ""
 
 permissions:
   contents: write
   pull-requests: write
 
 concurrency:
-  group: bff-deploy-hom-${{ github.ref_name }}-${{ github.sha }}
+  group: bff-deploy-hom-${{ github.event.pull_request.base.ref || github.ref_name }}
   cancel-in-progress: true
 
 env:
@@ -50,9 +54,52 @@ jobs:
         env:
           DISPATCH_RELEASE: ${{ github.event_name == 'workflow_dispatch' && inputs.release_branch || '' }}
           DISPATCH_SHA: ${{ github.event_name == 'workflow_dispatch' && inputs.target_sha || '' }}
+          HEAD_COMMIT_MSG: ${{ github.event.head_commit.message || '' }}
         run: |
           set -euo pipefail
           EVENT="${{ github.event_name }}"
+
+          is_promote_merge_message() {
+            local msg="$1"
+            echo "$msg" | grep -qiE '(^Merge pull request .*(/| )promote/)|(^develop → release/)'
+          }
+
+          if [ "$EVENT" = "pull_request" ]; then
+            MERGED="${{ github.event.pull_request.merged }}"
+            REL="${{ github.event.pull_request.base.ref }}"
+            HEAD="${{ github.event.pull_request.head.ref }}"
+            TIP="${{ github.event.pull_request.merge_commit_sha }}"
+
+            if [ "$MERGED" != "true" ]; then
+              echo "PR fechado sem merge; ignorando."
+              echo "should_run=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+
+            case "$REL" in
+              release/*) ;;
+              *)
+                echo "should_run=false" >> "$GITHUB_OUTPUT"
+                exit 0
+                ;;
+            esac
+
+            case "$HEAD" in
+              promote/*) ;;
+              *)
+                echo "Merge em ${REL} sem head promote/* (${HEAD}); ignorando."
+                echo "should_run=false" >> "$GITHUB_OUTPUT"
+                exit 0
+                ;;
+            esac
+
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+            echo "release_branch=$REL" >> "$GITHUB_OUTPUT"
+            VERSION="${REL#release/}"
+            echo "promote_branch=promote/${VERSION}" >> "$GITHUB_OUTPUT"
+            echo "target_sha=$TIP" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
 
           if [ "$EVENT" = "push" ]; then
             REL="${{ github.ref_name }}"
@@ -63,6 +110,14 @@ jobs:
                 exit 0
                 ;;
             esac
+
+            # Ignora sync/align do deploy-dev; só segue após merge promote→release.
+            if ! is_promote_merge_message "$HEAD_COMMIT_MSG"; then
+              echo "Push em ${REL} sem merge de promote (msg: ${HEAD_COMMIT_MSG%%$'\n'*}); HOM fica para o merge do PR."
+              echo "should_run=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+
             echo "should_run=true" >> "$GITHUB_OUTPUT"
             echo "release_branch=$REL" >> "$GITHUB_OUTPUT"
             VERSION="${REL#release/}"
@@ -83,7 +138,10 @@ jobs:
             if [ -n "${DISPATCH_SHA:-}" ]; then
               TIP="$DISPATCH_SHA"
             else
-              TIP="$(gh api "repos/${{ github.repository }}/commits" -f sha="$REL" -f per_page=1 --jq '.[0].sha')"
+              TIP="$(gh api "repos/${{ github.repository }}/commits/${REL}" --jq '.sha' 2>/dev/null || true)"
+              if [ -z "${TIP:-}" ]; then
+                TIP="$(git ls-remote "https://github.com/${{ github.repository }}.git" "refs/heads/${REL}" | awk '{print $1}')"
+              fi
             fi
             echo "should_run=true" >> "$GITHUB_OUTPUT"
             echo "release_branch=$REL" >> "$GITHUB_OUTPUT"
@@ -162,14 +220,45 @@ jobs:
         with:
           fetch-depth: 0
           token: ${{ secrets.AUTOMATION_TOKEN || github.token }}
-      - name: Delete promote branch
+      - name: Delete promote branch when unused
         shell: bash
         working-directory: .
         run: |
           set -euo pipefail
+          REPO="${{ github.repository }}"
           BRANCH="${{ needs.prepare.outputs.promote_branch }}"
-          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git"
-          git push origin --delete "$BRANCH" || true
+          RELEASE="${{ needs.prepare.outputs.release_branch }}"
+
+          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git"
+          git fetch origin "$RELEASE" "$BRANCH" 2>/dev/null || true
+
+          if ! git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
+            echo "${BRANCH} já não existe no remoto."
+            exit 0
+          fi
+
+          OPEN_PR="$(gh pr list --repo "$REPO" --state open --base "$RELEASE" --head "$BRANCH" --json number --jq '.[0].number // empty')"
+          if [ -n "$OPEN_PR" ]; then
+            echo "PR #${OPEN_PR} (${BRANCH} → ${RELEASE}) ainda aberto; mantendo ${BRANCH}."
+            exit 0
+          fi
+
+          MERGED_PR="$(gh pr list --repo "$REPO" --state merged --base "$RELEASE" --head "$BRANCH" --limit 1 --json number --jq '.[0].number // empty')"
+          CONTAINED=false
+          if git rev-parse --verify "origin/${BRANCH}" >/dev/null 2>&1 \
+            && git rev-parse --verify "origin/${RELEASE}" >/dev/null 2>&1 \
+            && git merge-base --is-ancestor "origin/${BRANCH}" "origin/${RELEASE}"; then
+            CONTAINED=true
+          fi
+
+          if [ -n "$MERGED_PR" ] || [ "$CONTAINED" = true ]; then
+            echo "Apagando ${BRANCH} (já consolidada em ${RELEASE})."
+            if ! git push origin --delete "$BRANCH"; then
+              echo "::warning::Não foi possível apagar ${BRANCH} (ruleset/permissões). Apague manualmente ou libere delete em promote/*."
+            fi
+          else
+            echo "promote ainda em uso (sem merge em ${RELEASE}); mantendo ${BRANCH}."
+          fi
 
   create-main-pr:
     name: "6/7 - Create or update PR to main"
