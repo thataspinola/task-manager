@@ -311,24 +311,40 @@ jobs:
               fi
               UNRESOLVED="$(git diff --name-only --diff-filter=U || true)"
               echo "Ficheiros em conflito: ${UNRESOLVED}"
+              HAS_HIST=false
+              HAS_PKG=false
               for f in $UNRESOLVED; do
                 case "$f" in
-                  api/package.json|api/package-lock.json) ;;
+                  docs/historico/*)
+                    HAS_HIST=true
+                    ;;
+                  api/package.json|api/package-lock.json)
+                    HAS_PKG=true
+                    ;;
                   *)
-                    echo "::error::Conflito em '${f}' — só api/package.json / package-lock.json são resolvidos automaticamente."
+                    echo "::error::Conflito em '${f}' sem resolução automática."
                     git merge --abort || true
                     exit 1
                     ;;
                 esac
               done
-              if [ ! -f "${{ github.workspace }}/scripts/resolve-merge-package-version.js" ]; then
-                echo "::error::Conflito em package.json sem scripts/resolve-merge-package-version.js no repositório."
-                git merge --abort || true
-                exit 1
+
+              if [ "$HAS_HIST" = true ]; then
+                python3 "${{ github.workspace }}/scripts/resolve_merge_historico.py"
               fi
-              cp "${{ github.workspace }}/scripts/resolve-merge-package-version.js" /tmp/resolve-merge-package-version.js
-              (cd /tmp && GIT_WORK_TREE="${{ github.workspace }}" node /tmp/resolve-merge-package-version.js)
-              git commit -m "chore: merge main into ${RELEASE_BRANCH} (versão npm alinhada) [skip ci]"
+
+              if [ "$HAS_PKG" = true ]; then
+                if [ ! -f "${{ github.workspace }}/scripts/resolve-merge-package-version.js" ]; then
+                  echo "::error::Conflito em package.json sem scripts/resolve-merge-package-version.js no repositório."
+                  git merge --abort || true
+                  exit 1
+                fi
+                cp "${{ github.workspace }}/scripts/resolve-merge-package-version.js" /tmp/resolve-merge-package-version.js
+                (cd /tmp && GIT_WORK_TREE="${{ github.workspace }}" node /tmp/resolve-merge-package-version.js)
+              fi
+
+              git add -A
+              git commit -m "chore: merge main into ${RELEASE_BRANCH} (conflitos auto-resolvidos) [skip ci]"
             fi
           fi
 
