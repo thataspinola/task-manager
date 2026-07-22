@@ -199,6 +199,74 @@ jobs:
             gh pr list --repo "$REPO" --state open --json baseRefName,headRefName --jq '.[] | select((.baseRefName | startswith("release/")) and (.headRefName | startswith("promote/"))) | .baseRefName' | head -n 1 || true
           }
 
+          open_main_release_branch() {
+            gh pr list --repo "$REPO" --state open --base main --json headRefName --jq '[.[] | select(.headRefName | startswith("release/")) | .headRefName][0] // empty' || true
+          }
+
+          # Uma única release por ciclo (API e BFF compartilham a mesma versão).
+          resolve_version() {
+            local package_json="$1"
+            local attempt open_rel open_main package_version highest ahead
+
+            for attempt in $(seq 1 8); do
+              git fetch origin --prune
+
+              open_rel="$(open_release_branch)"
+              if [ -n "$open_rel" ]; then
+                echo "${open_rel#release/}"
+                return 0
+              fi
+
+              open_main="$(open_main_release_branch)"
+              if [ -n "$open_main" ]; then
+                echo "${open_main#release/}"
+                return 0
+              fi
+
+              package_version="$(node -p "require('./${package_json}').version")"
+              highest="$package_version"
+              while IFS= read -r version; do
+                [ -z "$version" ] && continue
+                highest="$(max_version "$highest" "$version")"
+              done <<< "$(git ls-remote --heads origin 'refs/heads/release/*' 'refs/heads/promote/*' | awk -F'/' '{print $NF}')"
+
+              ahead=0
+              if git ls-remote --exit-code --heads origin "release/${highest}" >/dev/null 2>&1; then
+                git fetch origin "release/${highest}" main 2>/dev/null || true
+                ahead="$(git rev-list --count "origin/main..origin/release/${highest}" 2>/dev/null || echo 0)"
+              fi
+
+              # Release já existe e ainda não entrou em main → reutilizar (evita 0.0.6 e 0.0.7).
+              if [ "${ahead:-0}" -gt 0 ]; then
+                echo "$highest"
+                return 0
+              fi
+
+              # Promote órfã sem release correspondente → reutilizar a mesma versão.
+              if git ls-remote --exit-code --heads origin "promote/${highest}" >/dev/null 2>&1 \
+                && ! git ls-remote --exit-code --heads origin "release/${highest}" >/dev/null 2>&1; then
+                echo "$highest"
+                return 0
+              fi
+
+              # Precisa de versão nova. Aguarda jitter e confere de novo (corrida API↔BFF).
+              if [ "$attempt" -lt 8 ]; then
+                sleep $((1 + (attempt % 3) + (RANDOM % 3)))
+                open_rel="$(open_release_branch)"
+                if [ -n "$open_rel" ]; then
+                  echo "${open_rel#release/}"
+                  return 0
+                fi
+                if git ls-remote --exit-code --heads origin "release/$(increment_patch "$highest")" >/dev/null 2>&1; then
+                  continue
+                fi
+              fi
+
+              echo "$(increment_patch "$highest")"
+              return 0
+            done
+          }
+
           ensure_pr() {
             local head_branch="$1"
             local base_branch="$2"
@@ -214,20 +282,8 @@ jobs:
             fi
           }
 
-          OPEN_RELEASE_BRANCH="$(open_release_branch)"
-
-          if [ -n "$OPEN_RELEASE_BRANCH" ]; then
-            VERSION="${OPEN_RELEASE_BRANCH#release/}"
-          else
-            PACKAGE_VERSION="$(node -p "require('./bff/package.json').version")"
-            REMOTE_VERSIONS="$(git ls-remote --heads origin 'refs/heads/release/*' 'refs/heads/promote/*' | awk -F'/' '{print $NF}')"
-            HIGHEST_VERSION="$PACKAGE_VERSION"
-            while IFS= read -r version; do
-              [ -z "$version" ] && continue
-              HIGHEST_VERSION="$(max_version "$HIGHEST_VERSION" "$version")"
-            done <<< "$REMOTE_VERSIONS"
-            VERSION="$(increment_patch "$HIGHEST_VERSION")"
-          fi
+          VERSION="$(resolve_version "bff/package.json")"
+          echo "Versão de release compartilhada: ${VERSION}"
 
           RELEASE_BRANCH="release/${VERSION}"
           PROMOTE_BRANCH="promote/${VERSION}"
