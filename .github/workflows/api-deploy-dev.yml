@@ -396,6 +396,30 @@ jobs:
 
           ensure_pr "$PROMOTE_BRANCH" "$RELEASE_BRANCH" "develop → ${RELEASE_BRANCH}" "PR automático criado após validação em DEV para equalizar develop com main antes do fluxo em HOM."
 
+          # Se promote→release já foi mergeado e o HOM não rodou (paths/trigger), dispara agora.
+          dispatch_hom_if_promote_merged() {
+            local open_pr merged_pr
+            open_pr="$(gh pr list --repo "$REPO" --state open --base "$RELEASE_BRANCH" --head "$PROMOTE_BRANCH" --json number --jq '.[0].number // empty')"
+            if [ -n "$open_pr" ]; then
+              echo "PR promote→release #${open_pr} ainda aberto; HOM aguarda o merge."
+              return 0
+            fi
+            merged_pr="$(gh pr list --repo "$REPO" --state merged --base "$RELEASE_BRANCH" --head "$PROMOTE_BRANCH" --limit 1 --json number --jq '.[0].number // empty')"
+            if [ -z "$merged_pr" ]; then
+              echo "Nenhum merge promote→release encontrado ainda."
+              return 0
+            fi
+            echo "PR #${merged_pr} já mergeado; disparando Deploy Homol para ${RELEASE_BRANCH}."
+            git fetch origin "${RELEASE_BRANCH}"
+            TIP="$(git rev-parse "origin/${RELEASE_BRANCH}")"
+            gh workflow run "API - Deploy Homol" --repo "$REPO" \
+              -f "release_branch=${RELEASE_BRANCH}" \
+              -f "target_sha=${TIP}" || \
+              echo "::warning::Não foi possível disparar API - Deploy Homol."
+          }
+
+          dispatch_hom_if_promote_merged
+
   finish:
     name: "6/6 - Finish"
     runs-on: ubuntu-latest

@@ -1,14 +1,11 @@
 name: API - Deploy Homol
 
 on:
+  # Sem filtro paths: o merge promote→release frequentemente não toca api/**
+  # (conteúdo já alinhado). O job prepare só segue em merge de promote.
   push:
     branches:
       - "release/**"
-    paths:
-      - "api/**"
-      - ".github/workflows/api-*.yml"
-  # Merge promote → release deve sempre iniciar HOM + PR release→main
-  # (mesmo sem diff em api/**, ex.: conteúdo já alinhado antes do merge).
   pull_request:
     types: [closed]
     branches:
@@ -57,9 +54,15 @@ jobs:
         env:
           DISPATCH_RELEASE: ${{ github.event_name == 'workflow_dispatch' && inputs.release_branch || '' }}
           DISPATCH_SHA: ${{ github.event_name == 'workflow_dispatch' && inputs.target_sha || '' }}
+          HEAD_COMMIT_MSG: ${{ github.event.head_commit.message || '' }}
         run: |
           set -euo pipefail
           EVENT="${{ github.event_name }}"
+
+          is_promote_merge_message() {
+            local msg="$1"
+            echo "$msg" | grep -qiE '(^Merge pull request .*(/| )promote/)|(^develop → release/)'
+          }
 
           if [ "$EVENT" = "pull_request" ]; then
             MERGED="${{ github.event.pull_request.merged }}"
@@ -84,7 +87,7 @@ jobs:
             case "$HEAD" in
               promote/*) ;;
               *)
-                echo "Merge em ${REL} sem head promote/* (${HEAD}); ignorando create-main-pr automático."
+                echo "Merge em ${REL} sem head promote/* (${HEAD}); ignorando."
                 echo "should_run=false" >> "$GITHUB_OUTPUT"
                 exit 0
                 ;;
@@ -107,6 +110,14 @@ jobs:
                 exit 0
                 ;;
             esac
+
+            # Ignora sync/align do deploy-dev; só segue após merge promote→release.
+            if ! is_promote_merge_message "$HEAD_COMMIT_MSG"; then
+              echo "Push em ${REL} sem merge de promote (msg: ${HEAD_COMMIT_MSG%%$'\n'*}); HOM fica para o merge do PR."
+              echo "should_run=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+
             echo "should_run=true" >> "$GITHUB_OUTPUT"
             echo "release_branch=$REL" >> "$GITHUB_OUTPUT"
             VERSION="${REL#release/}"
@@ -127,7 +138,10 @@ jobs:
             if [ -n "${DISPATCH_SHA:-}" ]; then
               TIP="$DISPATCH_SHA"
             else
-              TIP="$(gh api "repos/${{ github.repository }}/commits" -f sha="$REL" -f per_page=1 --jq '.[0].sha')"
+              TIP="$(gh api "repos/${{ github.repository }}/commits/${REL}" --jq '.sha' 2>/dev/null || true)"
+              if [ -z "${TIP:-}" ]; then
+                TIP="$(git ls-remote "https://github.com/${{ github.repository }}.git" "refs/heads/${REL}" | awk '{print $1}')"
+              fi
             fi
             echo "should_run=true" >> "$GITHUB_OUTPUT"
             echo "release_branch=$REL" >> "$GITHUB_OUTPUT"
