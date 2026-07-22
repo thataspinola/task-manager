@@ -1,0 +1,135 @@
+name: Monorepo - Create PR to develop
+
+# push: roda a partir da própria feature/fix (não depende da branch default).
+# workflow_run: backup quando o YAML já estiver em main.
+#
+# Aguarda os Validates do mesmo SHA terminarem; se algum falhar, não abre o PR.
+on:
+  push:
+    branches:
+      - "feature/**"
+      - "fix/**"
+  workflow_run:
+    workflows:
+      - "API - Validate"
+      - "BFF - Validate"
+      - "Frontend - Validate"
+    types:
+      - completed
+
+permissions:
+  actions: read
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: create-dev-pr-${{ github.event.workflow_run.head_branch || github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  create-dev-pr:
+    name: Create or update PR to develop
+    runs-on: ubuntu-latest
+    # workflow_run só segue em success; push já filtra feature/fix no on:
+    if: >
+      github.event_name == 'push' ||
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       (startsWith(github.event.workflow_run.head_branch, 'feature/') ||
+        startsWith(github.event.workflow_run.head_branch, 'fix/')))
+    env:
+      # Barrier (listagem de runs) pode usar github.token.
+      GH_TOKEN: ${{ github.token }}
+      HEAD_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+      HEAD_BRANCH: ${{ github.event.workflow_run.head_branch || github.ref_name }}
+      REPO: ${{ github.repository }}
+      # Tempo máximo aguardando Validates (minutos).
+      MAX_WAIT_MINUTES: "60"
+      POLL_SECONDS: "20"
+      # Espera inicial para os Validates aparecerem na API após o push.
+      GRACE_SECONDS: "30"
+    steps:
+      - name: Wait for validates on the same SHA
+        id: barrier
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "Event: ${{ github.event_name }}"
+          echo "SHA: $HEAD_SHA"
+          echo "Branch: $HEAD_BRANCH"
+
+          list_runs() {
+            gh api \
+              -H "Accept: application/vnd.github+json" \
+              "/repos/${REPO}/actions/runs?head_sha=${HEAD_SHA}&per_page=100" \
+              --jq '[.workflow_runs[] | select(.name == "API - Validate" or .name == "BFF - Validate" or .name == "Frontend - Validate") | {name, status, conclusion, id}]'
+          }
+
+          echo "Aguardando ${GRACE_SECONDS}s para os Validates registrarem..."
+          sleep "$GRACE_SECONDS"
+
+          DEADLINE=$((SECONDS + MAX_WAIT_MINUTES * 60))
+          # Se nenhum validate aparecer, espera no máx. 2 min a mais (push só de docs/etc.).
+          EMPTY_DEADLINE=$((SECONDS + 120))
+
+          while true; do
+            RUNS_JSON="$(list_runs)"
+            echo "Runs no SHA: $RUNS_JSON"
+
+            PENDING="$(echo "$RUNS_JSON" | jq -r '[.[] | select(.status == "queued" or .status == "in_progress" or .status == "waiting" or .status == "requested" or .status == "pending")] | length')"
+            FAILED="$(echo "$RUNS_JSON" | jq -r '[.[] | select(.conclusion == "failure" or .conclusion == "cancelled" or .conclusion == "timed_out")] | length')"
+            SUCCESS="$(echo "$RUNS_JSON" | jq -r '[.[] | select(.conclusion == "success")] | length')"
+            TOTAL="$(echo "$RUNS_JSON" | jq -r 'length')"
+
+            if [ "$FAILED" -gt 0 ]; then
+              echo "should_create=false" >> "$GITHUB_OUTPUT"
+              echo "::error::Há ${FAILED} validate(s) com falha neste SHA; PR para develop não será criado."
+              exit 1
+            fi
+
+            if [ "$TOTAL" -eq 0 ]; then
+              if [ "$SECONDS" -lt "$EMPTY_DEADLINE" ]; then
+                echo "Nenhum Validate ainda na API; aguardando registro (${POLL_SECONDS}s)..."
+                sleep "$POLL_SECONDS"
+                continue
+              fi
+              echo "::notice::Nenhum Validate neste SHA (paths sem api/bff/frontend). Abrindo PR mesmo assim."
+              echo "should_create=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+
+            if [ "$PENDING" -gt 0 ]; then
+              if [ "$SECONDS" -ge "$DEADLINE" ]; then
+                echo "should_create=false" >> "$GITHUB_OUTPUT"
+                echo "::error::Timeout aguardando Validates (${MAX_WAIT_MINUTES} min)."
+                exit 1
+              fi
+              echo "Ainda há ${PENDING} validate(s) em andamento; nova checagem em ${POLL_SECONDS}s..."
+              sleep "$POLL_SECONDS"
+              continue
+            fi
+
+            echo "::notice::${SUCCESS} validate(s) ok neste SHA."
+            echo "should_create=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          done
+
+      - name: Checkout
+        if: steps.barrier.outputs.should_create == 'true'
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          ref: ${{ env.HEAD_BRANCH }}
+
+      - name: Create or update PR
+        if: steps.barrier.outputs.should_create == 'true'
+        shell: bash
+        env:
+          # Tenta github.token primeiro (checkbox do repo), depois AUTOMATION_TOKEN.
+          ACTIONS_PR_TOKEN: ${{ github.token }}
+          AUTOMATION_TOKEN: ${{ secrets.AUTOMATION_TOKEN }}
+        run: |
+          set -euo pipefail
+          chmod +x .github/scripts/create-or-update-dev-pr.sh
+          .github/scripts/create-or-update-dev-pr.sh "$HEAD_BRANCH"
