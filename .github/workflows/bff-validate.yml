@@ -10,8 +10,7 @@ on:
       - ".github/workflows/bff-*.yml"
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 concurrency:
   group: bff-validate-${{ github.ref_name }}
@@ -23,7 +22,7 @@ defaults:
 
 jobs:
   prepare:
-    name: "1/6 - Prepare"
+    name: "1/5 - Prepare"
     runs-on: ubuntu-latest
     outputs:
       should_run: ${{ steps.prepare.outputs.should_run }}
@@ -66,7 +65,7 @@ jobs:
           esac
 
   lint:
-    name: "2/6 - Lint"
+    name: "2/5 - Lint"
     runs-on: ubuntu-latest
     needs: prepare
     if: needs.prepare.outputs.should_run == 'true'
@@ -82,7 +81,7 @@ jobs:
       - run: npm run format:check
 
   build:
-    name: "3/6 - Build"
+    name: "3/5 - Build"
     runs-on: ubuntu-latest
     needs: [prepare, lint]
     if: needs.prepare.outputs.should_run == 'true'
@@ -97,7 +96,7 @@ jobs:
       - run: npm run build
 
   test:
-    name: "4/6 - Test"
+    name: "4/5 - Test"
     runs-on: ubuntu-latest
     needs: [prepare, lint, build]
     if: needs.prepare.outputs.should_run == 'true'
@@ -115,7 +114,7 @@ jobs:
         run: npm run test:e2e
 
   sonar:
-    name: "5/6 - SonarQube"
+    name: "5/5 - SonarQube"
     runs-on: ubuntu-latest
     needs: [prepare, test]
     if: needs.prepare.outputs.should_run == 'true' && needs.prepare.outputs.sonar_enabled == 'true'
@@ -137,74 +136,3 @@ jobs:
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
         with:
           projectBaseDir: bff
-
-  create-dev-pr:
-    name: "6/6 - Create or update PR to develop"
-    runs-on: ubuntu-latest
-    needs: [prepare, lint, build, test, sonar]
-    if: always() && needs.prepare.outputs.should_run == 'true' && needs.lint.result == 'success' && needs.build.result == 'success' && needs.test.result == 'success' && (needs.sonar.result == 'success' || needs.sonar.result == 'skipped')
-    env:
-      # Prefer GITHUB_TOKEN (permissions do workflow). AUTOMATION_TOKEN só se tiver escopo repo/PR.
-      GH_TOKEN: ${{ github.token }}
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          ref: ${{ github.sha }}
-          fetch-depth: 0
-      - name: "Create or update PR"
-        continue-on-error: true
-        shell: bash
-        working-directory: .
-        run: |
-          set +e
-          set -uo pipefail
-          REPO="${{ github.repository }}"
-          HEAD="${{ github.ref_name }}"
-          BASE="develop"
-
-          case "$HEAD" in
-            feature/*) TITLE="feature/${HEAD#feature/} → develop" ;;
-            fix/*) TITLE="fix/${HEAD#fix/} → develop" ;;
-            *) TITLE="${HEAD} → develop" ;;
-          esac
-
-          if ! git ls-remote --exit-code --heads origin "$BASE" >/dev/null 2>&1; then
-            echo "::notice::Branch base '$BASE' não existe no remoto; PR não será criado."
-            exit 0
-          fi
-
-          if ! git ls-remote --exit-code --heads origin "$HEAD" >/dev/null 2>&1; then
-            echo "::notice::Branch head '$HEAD' não existe no remoto; PR não será criado."
-            exit 0
-          fi
-
-          git fetch origin "$BASE" "$HEAD"
-
-          AHEAD="$(git rev-list --count "origin/$BASE..origin/$HEAD")"
-          echo "Commits em ${HEAD} à frente de ${BASE}: ${AHEAD}"
-
-          PR_NUMBER="$(gh pr list --repo "$REPO" --state open --base "$BASE" --head "$HEAD" --json number --jq '.[0].number // empty')"
-
-          if [ "$AHEAD" -eq 0 ]; then
-            echo "::notice::Não há commits únicos em ${HEAD} relativamente a ${BASE}; PR não será criado/atualizado."
-            exit 0
-          fi
-
-          if [ -n "$PR_NUMBER" ]; then
-            if gh pr edit "$PR_NUMBER" --repo "$REPO" --title "$TITLE" --body "PR automático criado após validação com sucesso."; then
-              echo "PR #$PR_NUMBER atualizado."
-              exit 0
-            fi
-            echo "::warning::Não foi possível atualizar o PR #$PR_NUMBER (permissão do token)."
-            exit 0
-          fi
-
-          if gh pr create --repo "$REPO" --base "$BASE" --head "$HEAD" --title "$TITLE" --body "PR automático criado após validação com sucesso."; then
-            echo "PR criado com sucesso."
-            exit 0
-          fi
-
-          echo "::warning::Não foi possível criar o PR automaticamente (token sem createPullRequest)."
-          echo "::notice::Abra manualmente: https://github.com/${REPO}/compare/${BASE}...${HEAD}?expand=1"
-          echo "::notice::Settings → Actions → Workflow permissions → Read and write permissions."
-          exit 0
